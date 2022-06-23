@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-06-23 10:24:42
+ * @LastEditTime: 2022-06-23 11:39:20
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -61,7 +61,7 @@ const useBodyParser = (opts: bodyParser.IOptions = {}): Koa.Middleware<Promise<v
         const isMuti = _multipart && ctx.is('multipart')
 
         try {
-            // json 解析，检查Content-Type类型 ctx.is()
+            // Json parsing, checking Content-Type type ctx.is()
             if (_json && ctx.is(jsonContentTypes)) {
                 body = await coBody.json(ctx, {
                     encoding: _encoding,
@@ -70,7 +70,7 @@ const useBodyParser = (opts: bodyParser.IOptions = {}): Koa.Middleware<Promise<v
                     returnRawBody: false
                 })
             }
-            // text 解析
+            // text parsing
             else if (_text && ctx.is('text/*')) {
                 body = await coBody.text(ctx, {
                     encoding: _encoding,
@@ -78,7 +78,7 @@ const useBodyParser = (opts: bodyParser.IOptions = {}): Koa.Middleware<Promise<v
                     returnRawBody: false
                 })
             }
-            // urlencoded 解析
+            // urlencoded parsing
             else if (_urlencoded && ctx.is('urlencoded')) {
                 body = await coBody.form(ctx, {
                     encoding: _encoding,
@@ -86,7 +86,7 @@ const useBodyParser = (opts: bodyParser.IOptions = {}): Koa.Middleware<Promise<v
                     returnRawBody: false
                 })
             }
-            // multipart 解析
+            // multipart parsing
             else if (isMuti) {
                 formData = await multipartParse(ctx, _multiOptions)
             }
@@ -99,7 +99,7 @@ const useBodyParser = (opts: bodyParser.IOptions = {}): Koa.Middleware<Promise<v
             }
         }
 
-        // 补丁:node参数存储于ctx.req中，koa存于ctx.request，这里只做patchKoa
+        // Patch: node parameter is stored in ctx.req, koa is stored in ctx.request, and only patchKoa is done here.
         if (isMuti) {
             ctx.request.raw = formData.raw
             ctx.request.files = formData.files
@@ -130,10 +130,10 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
 
         let raw = {}, files = {}
 
-        // 实例化解析工具
+        // Instantiation analysis tool
         let form = busboy({
             headers: ctx.req.headers,
-            defParamCharset: 'utf8', // 确保汉字param编码正确
+            defParamCharset: 'utf8', // Ensure that the param coding of Chinese characters is correct
             limits: {
                 files: !_fileParser ? 0 : _maxFiles,
                 fileSize: _maxFileSize,
@@ -142,9 +142,9 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             }
         })
 
-        // 监听处理
+        // Monitoring processing
         form
-            // 普通对象
+            // Ordinary object
             .on('field', (fieldName, val, _info) => {
                 if (raw[fieldName]) {
                     if (Array.isArray(raw[fieldName])) {
@@ -156,7 +156,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
                     raw[fieldName] = val
                 }
             })
-            // 不解析文件
+            // Do not parse the file
             .on('filesLimit', () => {
                 resolve({
                     raw,
@@ -168,7 +168,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             })
 
 
-        // 解析文件
+        // Parsing file
         if (_fileParser) {
             form.on('file', async (fieldName, fileStream, info) => {
                 const { filename, mimeType } = info
@@ -178,7 +178,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
                     lastModified: Date.now(),
                 }
 
-                // 文件处理前钩子
+                // Hook before file processing
                 if (_onFileBegin) {
                     if (_uploadToLocal) {
                         _onFileBegin(fieldName, file)
@@ -187,12 +187,12 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
                     }
                 }
 
-                // 文件流监听
+                // File stream monitoring
                 await fileStreamListener(file, fileStream, _uploadToLocal, _uploadDir).catch((err) => {
                     form.emit('error', err)
                 })
 
-                // 补丁
+                // Patch
                 if (files[fieldName]) {
                     if (Array.isArray(files[fieldName])) {
                         files[fieldName].push(file)
@@ -217,21 +217,22 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
 
 
 /**
+ * File stream monitoring
  * 文件流监听
  */
 function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadToLocal: boolean, uploadDir: string) {
     return new Promise((resolve, reject) => {
         let _size = 0
 
-        // 监听以获取数据size
+        // Monitor to get data size
         fileStream
-            // 监听chunk流
+            // Listen for chunk flow
             .on('data', (chunk) => {
                 _size += chunk.length
             })
-            // 监听写入完成
+            // Monitor write complete
             .on('end', () => {
-                // 文件大小计算
+                // File size calculation
                 const gb = Number((_size / 1024 / 1024 / 1024).toFixed(2)),
                     mb = Number((_size / 1024 / 1024).toFixed(2)),
                     kb = Number((_size / 1024).toFixed(2));
@@ -240,7 +241,7 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadT
                 file.fileSize = gb > 0 ? `${gb} GB` : mb > 0 ? `${mb} MB` : `${kb} KB`
             })
 
-        // 存本地
+        // Deposit locally
         if (uploadToLocal) {
             const newName = uuidv4() + path.extname(file.name)
             const data = new Date(), month = data.getMonth() + 1;
@@ -249,14 +250,14 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadT
             const filepath = path.join(folder, newName)
             const src = path.join(yyyyMM, newName)
 
-            // 检查文件夹是否存在如果不存在则新建文件夹
+            // Check if the folder exists. If not, create a new folder.
             if (!fs.existsSync(folder)) {
                 let pathtmp: string
                 folder.split(path.sep).forEach((dirname) => {
                     if (pathtmp) {
                         pathtmp = path.join(pathtmp, dirname)
                     } else {
-                        //如果在linux系统中，第一个dirname的值为空，所以赋值为"/"
+                        // If in a linux system, the value of the first dirname is empty, so the value assigned to "/"
                         if (dirname) {
                             pathtmp = dirname
                         } else {
@@ -269,10 +270,10 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadT
                 })
             }
 
-            // 创建写入流
+            // Create a write stream
             const ws = fs.createWriteStream(filepath)
 
-            // 写入
+            // Write
             fileStream.pipe(ws)
                 .on('error', (err) => {
                     reject(err)
@@ -287,15 +288,14 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadT
                     file.lastModified = Date.now()
                 })
 
-            // 报错
+            // Error
             fileStream.on('error', (err) => {
-                // 写入流不会主动关闭，需要销毁
+                // The write stream will not be actively closed and needs to be destroyed.
                 ws.destroy()
                 reject(err)
             })
 
         } else {
-            // 监听结束
             fileStream
                 .on('close', () => {
                     resolve(void 0)
@@ -316,16 +316,19 @@ interface IObj extends Object {
 }
 
 /**
+ * Configuration data type
  * 配置数据类型
  */
 export namespace bodyParser {
     export interface File {
         /**
+         * File name (original, with suffix)
          * 文件名（原始，带后缀）
          */
         name: string
 
         /**
+         * File name (after reset, storage name, with suffix)
          * 文件名（重设后，存储名称，带后缀）
          */
         newName?: string
@@ -337,16 +340,20 @@ export namespace bodyParser {
         size?: number
 
         /**
+         * Keep 2 decimal places for file size with units, such as
+         * `100.11 KB` and `100.12 MB`. Units are limited to KB, MB and GB.
          * 带单位的文件大小，保留2位小数，如`100.11 KB`、`100.12 MB`,单位只限KB、MB、GB
          */
         fileSize?: string
 
         /**
+         * Absolute path (local storage), non-local storage can be empty.
          * 绝对路径（本地存储），非本地存储可为空
          */
         path?: string | null
 
         /**
+         * Relative path, outer chain path.
          * 相对路径、外链路径
          * 便于数据库存储和前台访问(前端使用，因为path为绝对路径不安全)
          */

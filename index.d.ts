@@ -19,15 +19,18 @@ interface IObj extends Object {
     [key: string]: any;
 }
 /**
+ * Configuration data type
  * 配置数据类型
  */
 export declare namespace bodyParser {
     interface File {
         /**
+         * File name (original, with suffix)
          * 文件名（原始，带后缀）
          */
         name: string;
         /**
+         * File name (after reset, storage name, with suffix)
          * 文件名（重设后，存储名称，带后缀）
          */
         newName?: string;
@@ -37,14 +40,18 @@ export declare namespace bodyParser {
          */
         size?: number;
         /**
+         * Keep 2 decimal places for file size with units, such as
+         * `100.11 KB` and `100.12 MB`. Units are limited to KB, MB and GB.
          * 带单位的文件大小，保留2位小数，如`100.11 KB`、`100.12 MB`,单位只限KB、MB、GB
          */
         fileSize?: string;
         /**
+         * Absolute path (local storage), non-local storage can be empty.
          * 绝对路径（本地存储），非本地存储可为空
          */
         path?: string | null;
         /**
+         * Relative path, outer chain path.
          * 相对路径、外链路径
          * 便于数据库存储和前台访问(前端使用，因为path为绝对路径不安全)
          */

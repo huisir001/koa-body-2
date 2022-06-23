@@ -1,7 +1,5 @@
 # koa-body-2
 
-=============
-
 > A full-featured [`koa`](https://github.com/koajs/koa) body parser middleware. Supports `multipart`, `urlencoded`, and `json` request bodies. Provides the same functionality as Express's bodyParser - [`multer`](https://github.com/expressjs/multer).         
 
 > Reference from [`koa-body`](https://github.com/koajs/koa-body), Improve the file upload mechanism, support custom storage of files, support unparsed file configuration, and make file upload more flexible.     
@@ -34,7 +32,7 @@ npm install koa koa-body-2 # Note that Koa requires Node.js 7.6.0+ for async/awa
 
 ```js
 import Koa from 'koa'
-import koaBody2 from '../index.js'
+import koaBody2 from 'koa-body-2'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'

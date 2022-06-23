@@ -25,7 +25,7 @@ const useBodyParser = (opts = {}) => {
         let formData = {};
         const isMuti = _multipart && ctx.is('multipart');
         try {
-            // json 解析，检查Content-Type类型 ctx.is()
+            // Json parsing, checking Content-Type type ctx.is()
             if (_json && ctx.is(jsonContentTypes)) {
                 body = await coBody.json(ctx, {
                     encoding: _encoding,
@@ -34,7 +34,7 @@ const useBodyParser = (opts = {}) => {
                     returnRawBody: false
                 });
             }
-            // text 解析
+            // text parsing
             else if (_text && ctx.is('text/*')) {
                 body = await coBody.text(ctx, {
                     encoding: _encoding,
@@ -42,7 +42,7 @@ const useBodyParser = (opts = {}) => {
                     returnRawBody: false
                 });
             }
-            // urlencoded 解析
+            // urlencoded parsing
             else if (_urlencoded && ctx.is('urlencoded')) {
                 body = await coBody.form(ctx, {
                     encoding: _encoding,
@@ -50,7 +50,7 @@ const useBodyParser = (opts = {}) => {
                     returnRawBody: false
                 });
             }
-            // multipart 解析
+            // multipart parsing
             else if (isMuti) {
                 formData = await multipartParse(ctx, _multiOptions);
             }
@@ -63,7 +63,7 @@ const useBodyParser = (opts = {}) => {
                 throw parsingError;
             }
         }
-        // 补丁:node参数存储于ctx.req中，koa存于ctx.request，这里只做patchKoa
+        // Patch: node parameter is stored in ctx.req, koa is stored in ctx.request, and only patchKoa is done here.
         if (isMuti) {
             ctx.request.raw = formData.raw;
             ctx.request.files = formData.files;
@@ -84,7 +84,7 @@ function multipartParse(ctx, opts) {
         maxFiles: _maxFiles = Infinity, maxFileSize: _maxFileSize = 200 * 1024 * 1024, // 200m
         maxFields: _maxFields = 1000, maxFieldsSize: _maxFieldsSize = 2 * 1024 * 1024, uploadToLocal: _uploadToLocal = true, uploadDir: _uploadDir = os.tmpdir(), onFileBegin: _onFileBegin } = opts;
         let raw = {}, files = {};
-        // 实例化解析工具
+        // Instantiation analysis tool
         let form = busboy({
             headers: ctx.req.headers,
             defParamCharset: 'utf8',
@@ -95,9 +95,9 @@ function multipartParse(ctx, opts) {
                 fieldSize: _maxFieldsSize,
             }
         });
-        // 监听处理
+        // Monitoring processing
         form
-            // 普通对象
+            // Ordinary object
             .on('field', (fieldName, val, _info) => {
             if (raw[fieldName]) {
                 if (Array.isArray(raw[fieldName])) {
@@ -111,7 +111,7 @@ function multipartParse(ctx, opts) {
                 raw[fieldName] = val;
             }
         })
-            // 不解析文件
+            // Do not parse the file
             .on('filesLimit', () => {
             resolve({
                 raw,
@@ -121,7 +121,7 @@ function multipartParse(ctx, opts) {
             .on('error', (err) => {
             reject(err);
         });
-        // 解析文件
+        // Parsing file
         if (_fileParser) {
             form.on('file', async (fieldName, fileStream, info) => {
                 const { filename, mimeType } = info;
@@ -130,7 +130,7 @@ function multipartParse(ctx, opts) {
                     type: mimeType,
                     lastModified: Date.now(),
                 };
-                // 文件处理前钩子
+                // Hook before file processing
                 if (_onFileBegin) {
                     if (_uploadToLocal) {
                         _onFileBegin(fieldName, file);
@@ -139,11 +139,11 @@ function multipartParse(ctx, opts) {
                         _onFileBegin(fieldName, file, fileStream);
                     }
                 }
-                // 文件流监听
+                // File stream monitoring
                 await fileStreamListener(file, fileStream, _uploadToLocal, _uploadDir).catch((err) => {
                     form.emit('error', err);
                 });
-                // 补丁
+                // Patch
                 if (files[fieldName]) {
                     if (Array.isArray(files[fieldName])) {
                         files[fieldName].push(file);
@@ -166,25 +166,26 @@ function multipartParse(ctx, opts) {
     });
 }
 /**
+ * File stream monitoring
  * 文件流监听
  */
 function fileStreamListener(file, fileStream, uploadToLocal, uploadDir) {
     return new Promise((resolve, reject) => {
         let _size = 0;
-        // 监听以获取数据size
+        // Monitor to get data size
         fileStream
-            // 监听chunk流
+            // Listen for chunk flow
             .on('data', (chunk) => {
             _size += chunk.length;
         })
-            // 监听写入完成
+            // Monitor write complete
             .on('end', () => {
-            // 文件大小计算
+            // File size calculation
             const gb = Number((_size / 1024 / 1024 / 1024).toFixed(2)), mb = Number((_size / 1024 / 1024).toFixed(2)), kb = Number((_size / 1024).toFixed(2));
             file.size = _size;
             file.fileSize = gb > 0 ? `${gb} GB` : mb > 0 ? `${mb} MB` : `${kb} KB`;
         });
-        // 存本地
+        // Deposit locally
         if (uploadToLocal) {
             const newName = uuidv4() + path.extname(file.name);
             const data = new Date(), month = data.getMonth() + 1;
@@ -192,7 +193,7 @@ function fileStreamListener(file, fileStream, uploadToLocal, uploadDir) {
             const folder = path.join(uploadDir, yyyyMM);
             const filepath = path.join(folder, newName);
             const src = path.join(yyyyMM, newName);
-            // 检查文件夹是否存在如果不存在则新建文件夹
+            // Check if the folder exists. If not, create a new folder.
             if (!fs.existsSync(folder)) {
                 let pathtmp;
                 folder.split(path.sep).forEach((dirname) => {
@@ -200,7 +201,7 @@ function fileStreamListener(file, fileStream, uploadToLocal, uploadDir) {
                         pathtmp = path.join(pathtmp, dirname);
                     }
                     else {
-                        //如果在linux系统中，第一个dirname的值为空，所以赋值为"/"
+                        // If in a linux system, the value of the first dirname is empty, so the value assigned to "/"
                         if (dirname) {
                             pathtmp = dirname;
                         }
@@ -213,9 +214,9 @@ function fileStreamListener(file, fileStream, uploadToLocal, uploadDir) {
                     }
                 });
             }
-            // 创建写入流
+            // Create a write stream
             const ws = fs.createWriteStream(filepath);
-            // 写入
+            // Write
             fileStream.pipe(ws)
                 .on('error', (err) => {
                 reject(err);
@@ -229,15 +230,14 @@ function fileStreamListener(file, fileStream, uploadToLocal, uploadDir) {
                 file.src = src;
                 file.lastModified = Date.now();
             });
-            // 报错
+            // Error
             fileStream.on('error', (err) => {
-                // 写入流不会主动关闭，需要销毁
+                // The write stream will not be actively closed and needs to be destroyed.
                 ws.destroy();
                 reject(err);
             });
         }
         else {
-            // 监听结束
             fileStream
                 .on('close', () => {
                 resolve(void 0);
