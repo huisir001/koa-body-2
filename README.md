@@ -32,7 +32,7 @@ npm install koa koa-body-2 # Note that Koa requires Node.js 7.6.0+ for async/awa
 
 ```js
 import Koa from 'koa'
-import koaBody2 from '../index.js'
+import koaBody2 from 'koa-body-2'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
