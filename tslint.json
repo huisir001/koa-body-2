@@ -1,0 +1,56 @@
+{
+    "defaultSeverity": "warning",
+    "extends": [
+        "tslint:recommended"
+    ],
+    "linterOptions": {
+        "exclude": [
+            "node_modules/**"
+        ]
+    },
+    "rules": {
+        "indent": [
+            true,
+            "spaces",
+            2
+        ],
+        "interface-name": false,
+        "no-consecutive-blank-lines": false,
+        "object-literal-sort-keys": false,
+        "no-trailing-whitespace": false,
+        "ordered-imports": false,
+        "eofline": false,
+        "curly": true,
+        "arrow-parens": false,
+        "quotemark": [
+            false,
+            "single"
+        ],
+        "trailing-comma": false,
+        "member-access": [
+            true,
+            "no-public"
+        ],
+        "no-conditional-assignment": true,
+        "no-unused-expression": false,
+        "space-before-function-paren": [
+            false,
+            {
+                "anonymous": "always",
+                "named": "always",
+                "asyncArrow": "always"
+            }
+        ],
+        "semicolon": [
+            false,
+            "always"
+        ],
+        "comment-format": [
+            false,
+            "check-space"
+        ],
+        "only-arrow-functions": [
+            false
+        ]
+    }
+}

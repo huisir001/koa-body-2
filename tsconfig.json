@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "strict": true,
+    "jsx": "preserve",
+    "importHelpers": true,
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "strictNullChecks": false,
+    "allowSyntheticDefaultImports": true,
+    "suppressImplicitAnyIndexErrors": true,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "noEmit": false,
+    "declaration": true,
+    "lib": [
+      "esnext",
+      "scripthost",
+      "ES6",
+      "dom"
+    ]
+  },
+  "include": [
+    "*.ts",
+    "./**/*.ts",
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
