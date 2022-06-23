@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A Koa body parser middleware. Supports multipart, urlencoded and JSON request bodies.",
   "main": "index.js",
+  "type": "module",
   "directories": {
     "example": "example"
   },
