@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-06-23 18:17:18
+ * @LastEditTime: 2022-06-23 18:28:29
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -407,25 +407,11 @@ export namespace bodyParser {
         lastModified: number
 
         /**
-         * File hash value, as the unique identity of the file.The value is assigned to the parameter hash passed by
-         * the client (usually used to calculate the MD5 value of the file when uploading multipart and
-         * resuming upload from breakpoints), and uuid if not uploaded by the client.
-         * 文件hash值，作为文件唯一标识，赋值为客戶端传参hash（一般用于分片上传、断点续传时，
-         * 计算文件的md5值），若客户端未传，则赋值为uuid。
+         * Unique ID of the file. (If it is a multipart upload mechanism, the unique ID of the file 
+         * fragment is used. Uuid is used for assignment here).
+         * 文件唯一标识，（若为分片上传机制，则为文件片段唯一标识，这里赋值使用uuid）。
          */
         hash: string
-
-        // /**
-        //  * 当前切片号，文件分片上传所需字段，
-        //  * 起始为 0
-        //  */
-        // chunkNumber?: number
-
-        // /**
-        //  * 切片总数，文件分片上传所需字段，
-        //  * 最小为 1
-        //  */
-        // chunkCount?: number
     }
 
     export interface Files {

@@ -74,11 +74,9 @@ export declare namespace bodyParser {
          */
         lastModified: number;
         /**
-         * File hash value, as the unique identity of the file.The value is assigned to the parameter hash passed by
-         * the client (usually used to calculate the MD5 value of the file when uploading multipart and
-         * resuming upload from breakpoints), and uuid if not uploaded by the client.
-         * 文件hash值，作为文件唯一标识，赋值为客戶端传参hash（一般用于分片上传、断点续传时，
-         * 计算文件的md5值），若客户端未传，则赋值为uuid。
+         * Unique ID of the file. (If it is a multipart upload mechanism, the unique ID of the file
+         * fragment is used. Uuid is used for assignment here).
+         * 文件唯一标识，（若为分片上传机制，则为文件片段唯一标识，这里赋值使用uuid）。
          */
         hash: string;
     }
