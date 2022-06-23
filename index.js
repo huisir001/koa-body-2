@@ -5,19 +5,20 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { v4 as uuidv4 } from 'uuid';
 /**!
- * 可处理 application/x-www-form-urlencoded 和 application/json 以及 multipart/form-data 数据，可配置
- * multipart/form-data中的文件数据默认不存，可配置
- * multipart/form-data中的文件数据可直接存本地，参数补充至ctx.request.files
- * multipart/form-data中文件数据亦可自定义存储，可配置（koa-body不支持自定义，故重写）
+ * `application/x-www-form-urlencoded` and `application/json` and `text/*` data to ctx.request.body.
+ * File in `multipart/form-data` can be configured not to parse.
+ * FormData other than files in `multipart/form-data` to ctx.request.raw.
+ * File in `multipart/form-data` is stored locally by default, and parameters are added to ctx.request.files.
+ * File in `multipart/form-data` can also be customized (koa-body does not support customization, so it can be rewritten).
  */
-// json数据类型
+// Json data type
 const jsonContentTypes = [
     'application/json',
     'application/json-patch+json',
     'application/vnd.api+json',
     'application/csp-report'
 ];
-// 主函数
+// main
 const useBodyParser = (opts = {}) => {
     const { onError: _onError, multipart: _multipart = false, urlencoded: _urlencoded = true, json: _json = true, text: _text = true, encoding: _encoding = 'utf-8', jsonLimit: _jsonLimit = '1mb', jsonStrict: _jsonStrict = true, formLimit: _formLimit = '56kb', multiOptions: _multiOptions = {}, textLimit: _textLimit = '56kb' } = opts;
     return async (ctx, next) => {
@@ -82,8 +83,8 @@ function multipartParse(ctx, opts) {
     return new Promise((resolve, reject) => {
         const { fileParser: _fileParser = true, // 是否解析文件
         maxFiles: _maxFiles = Infinity, maxFileSize: _maxFileSize = 200 * 1024 * 1024, // 200m
-        maxFields: _maxFields = 1000, maxFieldsSize: _maxFieldsSize = 2 * 1024 * 1024, uploadToLocal: _uploadToLocal = true, uploadDir: _uploadDir = os.tmpdir(), onFileBegin: _onFileBegin } = opts;
-        let raw = {}, files = {};
+        maxFields: _maxFields = 1000, maxFieldsSize: _maxFieldsSize = 2 * 1024 * 1024, ifDIY: _ifDIY = false, uploadDir: _uploadDir = os.tmpdir(), onFileBegin: _onFileBegin } = opts;
+        let raw = {}, files = {}, hasFile = false;
         // Instantiation analysis tool
         let form = busboy({
             headers: ctx.req.headers,
@@ -118,29 +119,42 @@ function multipartParse(ctx, opts) {
                 files
             });
         })
+            // 结束
+            .on('close', () => {
+            if (!hasFile) {
+                resolve({
+                    raw,
+                    files
+                });
+            }
+        })
             .on('error', (err) => {
             reject(err);
         });
         // Parsing file
         if (_fileParser) {
             form.on('file', async (fieldName, fileStream, info) => {
+                // 是否传入file
+                hasFile = true;
                 const { filename, mimeType } = info;
                 const file = {
                     name: filename,
+                    extName: path.extname(filename),
                     type: mimeType,
+                    hash: uuidv4(),
                     lastModified: Date.now(),
                 };
                 // Hook before file processing
                 if (_onFileBegin) {
-                    if (_uploadToLocal) {
-                        _onFileBegin(fieldName, file);
+                    if (_ifDIY) {
+                        _onFileBegin(fieldName, file, fileStream);
                     }
                     else {
-                        _onFileBegin(fieldName, file, fileStream);
+                        _onFileBegin(fieldName, file);
                     }
                 }
                 // File stream monitoring
-                await fileStreamListener(file, fileStream, _uploadToLocal, _uploadDir).catch((err) => {
+                await fileStreamListener(file, fileStream, _ifDIY, _uploadDir).catch((err) => {
                     form.emit('error', err);
                 });
                 // Patch
@@ -169,7 +183,7 @@ function multipartParse(ctx, opts) {
  * File stream monitoring
  * 文件流监听
  */
-function fileStreamListener(file, fileStream, uploadToLocal, uploadDir) {
+function fileStreamListener(file, fileStream, _ifDIY, uploadDir) {
     return new Promise((resolve, reject) => {
         let _size = 0;
         // Monitor to get data size
@@ -183,11 +197,11 @@ function fileStreamListener(file, fileStream, uploadToLocal, uploadDir) {
             // File size calculation
             const gb = Number((_size / 1024 / 1024 / 1024).toFixed(2)), mb = Number((_size / 1024 / 1024).toFixed(2)), kb = Number((_size / 1024).toFixed(2));
             file.size = _size;
-            file.fileSize = gb > 0 ? `${gb} GB` : mb > 0 ? `${mb} MB` : `${kb} KB`;
+            file.unitSize = gb > 1 ? `${gb} GB` : mb > 1 ? `${mb} MB` : `${kb} KB`;
         });
         // Deposit locally
-        if (uploadToLocal) {
-            const newName = uuidv4() + path.extname(file.name);
+        if (!_ifDIY) {
+            const newName = file.hash + file.extName;
             const data = new Date(), month = data.getMonth() + 1;
             const yyyyMM = data.getFullYear() + (month < 10 ? '0' + month : '' + month);
             const folder = path.join(uploadDir, yyyyMM);

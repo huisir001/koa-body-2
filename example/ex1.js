@@ -2,7 +2,7 @@
  * @Description: example1
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-23 11:14:03
- * @LastEditTime: 2022-06-23 11:17:55
+ * @LastEditTime: 2022-06-23 17:17:38
  */
 import Koa from 'koa'
 import koaBody2 from '../index.js'
@@ -21,7 +21,7 @@ const koaBodyOpts = {
 
         fileParser: true, // if parse file
 
-        uploadToLocal: false, // default true
+        ifDIY: true,
 
         // uploadDir: os.tmpdir(),
 
@@ -45,10 +45,10 @@ const koaBodyOpts = {
                             kb = Number((_size / 1024).toFixed(2));
 
                         file.size = _size
-                        file.fileSize = gb > 0 ? `${gb} GB` : mb > 0 ? `${mb} MB` : `${kb} KB`
+                        file.unitSize = gb > 1 ? `${gb} GB` : mb > 1 ? `${mb} MB` : `${kb} KB`
                     })
 
-                const newName = `my_file.${path.extname(file.name)}`
+                const newName = file.hash + file.extName
 
                 const filepath = path.join(os.tmpdir(), newName)
 

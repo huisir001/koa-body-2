@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-06-23 11:39:20
+ * @LastEditTime: 2022-06-23 17:32:27
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -14,6 +14,7 @@ import fs from 'node:fs'
 import { v4 as uuidv4 } from 'uuid'
 
 /**
+ * Koa supplement
  * koa补充
  */
 declare module "koa" {
@@ -25,13 +26,14 @@ declare module "koa" {
 }
 
 /**!
- * 可处理 application/x-www-form-urlencoded 和 application/json 以及 multipart/form-data 数据，可配置
- * multipart/form-data中的文件数据默认不存，可配置
- * multipart/form-data中的文件数据可直接存本地，参数补充至ctx.request.files
- * multipart/form-data中文件数据亦可自定义存储，可配置（koa-body不支持自定义，故重写） 
+ * `application/x-www-form-urlencoded` and `application/json` and `text/*` data to ctx.request.body.
+ * File in `multipart/form-data` can be configured not to parse.
+ * FormData other than files in `multipart/form-data` to ctx.request.raw.
+ * File in `multipart/form-data` is stored locally by default, and parameters are added to ctx.request.files.
+ * File in `multipart/form-data` can also be customized (koa-body does not support customization, so it can be rewritten).
  */
 
-// json数据类型
+// Json data type
 const jsonContentTypes = [
     'application/json',
     'application/json-patch+json',
@@ -39,7 +41,7 @@ const jsonContentTypes = [
     'application/csp-report'
 ]
 
-// 主函数
+// main
 const useBodyParser = (opts: bodyParser.IOptions = {}): Koa.Middleware<Promise<void>> => {
     const {
         onError: _onError,
@@ -123,12 +125,12 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             maxFileSize: _maxFileSize = 200 * 1024 * 1024, // 200m
             maxFields: _maxFields = 1000,
             maxFieldsSize: _maxFieldsSize = 2 * 1024 * 1024,
-            uploadToLocal: _uploadToLocal = true,
+            ifDIY: _ifDIY = false,
             uploadDir: _uploadDir = os.tmpdir(),
             onFileBegin: _onFileBegin
         } = opts
 
-        let raw = {}, files = {}
+        let raw = {}, files = {}, hasFile = false
 
         // Instantiation analysis tool
         let form = busboy({
@@ -163,32 +165,44 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
                     files
                 })
             })
+            // 结束
+            .on('close', () => {
+                if (!hasFile) {
+                    resolve({
+                        raw,
+                        files
+                    })
+                }
+            })
             .on('error', (err) => {
                 reject(err)
             })
 
-
         // Parsing file
         if (_fileParser) {
             form.on('file', async (fieldName, fileStream, info) => {
+                // 是否传入file
+                hasFile = true
                 const { filename, mimeType } = info
                 const file: bodyParser.File = {
                     name: filename,
+                    extName: path.extname(filename),
                     type: mimeType,
+                    hash: uuidv4(),
                     lastModified: Date.now(),
                 }
 
                 // Hook before file processing
                 if (_onFileBegin) {
-                    if (_uploadToLocal) {
-                        _onFileBegin(fieldName, file)
-                    } else {
+                    if (_ifDIY) {
                         _onFileBegin(fieldName, file, fileStream)
+                    } else {
+                        _onFileBegin(fieldName, file)
                     }
                 }
 
                 // File stream monitoring
-                await fileStreamListener(file, fileStream, _uploadToLocal, _uploadDir).catch((err) => {
+                await fileStreamListener(file, fileStream, _ifDIY, _uploadDir).catch((err) => {
                     form.emit('error', err)
                 })
 
@@ -220,7 +234,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
  * File stream monitoring
  * 文件流监听
  */
-function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadToLocal: boolean, uploadDir: string) {
+function fileStreamListener(file: bodyParser.File, fileStream: Readable, _ifDIY: boolean, uploadDir: string) {
     return new Promise((resolve, reject) => {
         let _size = 0
 
@@ -238,13 +252,13 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadT
                     kb = Number((_size / 1024).toFixed(2));
 
                 file.size = _size
-                file.fileSize = gb > 0 ? `${gb} GB` : mb > 0 ? `${mb} MB` : `${kb} KB`
+                file.unitSize = gb > 1 ? `${gb} GB` : mb > 1 ? `${mb} MB` : `${kb} KB`
             })
 
         // Deposit locally
-        if (uploadToLocal) {
-            const newName = uuidv4() + path.extname(file.name)
-            const data = new Date(), month = data.getMonth() + 1;
+        if (!_ifDIY) {
+            const newName = file.hash + file.extName
+            const data = new Date(), month = data.getMonth() + 1
             const yyyyMM = data.getFullYear() + (month < 10 ? '0' + month : '' + month)
             const folder = path.join(uploadDir, yyyyMM)
             const filepath = path.join(folder, newName)
@@ -322,14 +336,20 @@ interface IObj extends Object {
 export namespace bodyParser {
     export interface File {
         /**
-         * File name (original, with suffix)
-         * 文件名（原始，带后缀）
+         * File name (original, with extName)
+         * 文件名（原始，带文件扩展名）
          */
         name: string
 
         /**
-         * File name (after reset, storage name, with suffix)
-         * 文件名（重设后，存储名称，带后缀）
+         * File extName, example `.exe`、`.xml`
+         * 文件扩展名，如`.exe`、`.xml`
+         */
+        extName: string
+
+        /**
+         * File name (after reset, storage name)
+         * 文件名（重设后，存储名称）
          */
         newName?: string
 
@@ -344,7 +364,7 @@ export namespace bodyParser {
          * `100.11 KB` and `100.12 MB`. Units are limited to KB, MB and GB.
          * 带单位的文件大小，保留2位小数，如`100.11 KB`、`100.12 MB`,单位只限KB、MB、GB
          */
-        fileSize?: string
+        unitSize?: string
 
         /**
          * Absolute path (local storage), non-local storage can be empty.
@@ -366,17 +386,21 @@ export namespace bodyParser {
 
 
         /**
-         * A number representing the number of milliseconds between the Unix time epoch and when the file was last modified. \
+         * A number representing the number of milliseconds between the Unix time epoch and when the file was last modified. 
          * Defaults to a value of Date.now().
          * 最后一次修改时间戳，毫秒数 (文件上传后需要修改文件名再存储，所以取Date.now()为最后修改时间)
          * @default `Date.now()`
          */
         lastModified: number
 
-        // /**
-        //  * 文件md5值，作为文件唯一标识
-        //  */
-        // fileHash?: string
+        /**
+         * File hash value, as the unique identity of the file.The value is assigned to the parameter hash passed by
+         * the client (usually used to calculate the MD5 value of the file when uploading multipart and
+         * resuming upload from breakpoints), and uuid if not uploaded by the client.
+         * 文件hash值，作为文件唯一标识，赋值为客戶端传参hash（一般用于分片上传、断点续传时，
+         * 计算文件的md5值），若客户端未传，则赋值为uuid。
+         */
+        hash: string
 
         // /**
         //  * 当前切片号，文件分片上传所需字段，
@@ -397,10 +421,17 @@ export namespace bodyParser {
 
     export interface IMultipartOptions {
         /**
-        * {Boolean} Parse multipart files, default true
-        * 是否解析文件数据，默认true，为 false 时无法解析文件，只处理文件以外的 multipart 参数
-        */
+         * {Boolean} Parse multipart files, default true
+         * 是否解析文件数据，默认true，为 false 时无法解析文件，只处理文件以外的 multipart 参数
+         * @default true
+         */
         fileParser?: boolean
+
+        /**
+         * {Boolean} 
+         * @default false
+         */
+
 
         /**
          * {Integer} Limits the file number.
@@ -429,18 +460,19 @@ export namespace bodyParser {
         maxFieldsSize?: number
 
         /**
-         * {Boolean} Save local disk
-         * 是否存本地磁盘，默认为true，
-         * 若设为false,则文件不会被存储，可在onFileBegin钩子中对文件流进行转存或处理
-         * @default true
+         * {Boolean} If DIY file processing 
+         * 是否自定义文件处理，默认为false，文件将会存储至本地磁盘，
+         * 若设为true,则文件不会走默认处理脚本，可在onFileBegin钩子中对文件流进行转存或处理，
+         * 如存到外部服务器、进行分片上传、断点续传等
+         * @default false
          */
-        uploadToLocal?: boolean
+        ifDIY?: boolean
 
         /**
          * {String} Sets the directory for placing file uploads in，
          * 前提是需要配置`uploadToLocal = true`，默认路径:
-         * `[uploadDir]/[date@yyyyMM]/[uuid].ext`
-         * 以当前年月分类存储，重命名为uuid,
+         * `[uploadDir]/[date@yyyyMM]/[hash].ext`
+         * 以当前年月分类存储，重命名为hash,
          * 请使用绝对路径
          * @premise uploadToLocal == true 
          * @default os.tmpdir()
@@ -448,7 +480,7 @@ export namespace bodyParser {
         uploadDir?: string
 
         /**
-         * {Function} Special callback on file begin. The function is executed directly by formidable.
+         * {Function} Special callback on file begin.
          * 文件处理前钩子函数，当配置uploadToLocal为false时，此钩子传回文件流fileStream，
          * 可使用`fileStream.on('data', (data)=>{}).on('close',()=>{})`监听文件流进行转存，
          * 可在此对file中的参数进行修改,如修改path以存到自定义位置
@@ -508,7 +540,7 @@ export namespace bodyParser {
         jsonStrict?: boolean;
 
         /**
-         * {Object} Options to pass to the formidable multipart parser
+         * {Object} Options to pass to the form multipart parser
          * multipart 解析参数，只有在 multipart 设为 true 时有效
          */
         multiOptions?: IMultipartOptions;

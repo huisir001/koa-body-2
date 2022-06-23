@@ -2,6 +2,7 @@
 import type Koa from 'koa';
 import { Readable } from 'node:stream';
 /**
+ * Koa supplement
  * koa补充
  */
 declare module "koa" {
@@ -25,13 +26,18 @@ interface IObj extends Object {
 export declare namespace bodyParser {
     interface File {
         /**
-         * File name (original, with suffix)
-         * 文件名（原始，带后缀）
+         * File name (original, with extName)
+         * 文件名（原始，带文件扩展名）
          */
         name: string;
         /**
-         * File name (after reset, storage name, with suffix)
-         * 文件名（重设后，存储名称，带后缀）
+         * File extName, example `.exe`、`.xml`
+         * 文件扩展名，如`.exe`、`.xml`
+         */
+        extName: string;
+        /**
+         * File name (after reset, storage name)
+         * 文件名（重设后，存储名称）
          */
         newName?: string;
         /**
@@ -44,7 +50,7 @@ export declare namespace bodyParser {
          * `100.11 KB` and `100.12 MB`. Units are limited to KB, MB and GB.
          * 带单位的文件大小，保留2位小数，如`100.11 KB`、`100.12 MB`,单位只限KB、MB、GB
          */
-        fileSize?: string;
+        unitSize?: string;
         /**
          * Absolute path (local storage), non-local storage can be empty.
          * 绝对路径（本地存储），非本地存储可为空
@@ -61,22 +67,35 @@ export declare namespace bodyParser {
          */
         type: string | null;
         /**
-         * A number representing the number of milliseconds between the Unix time epoch and when the file was last modified. \
+         * A number representing the number of milliseconds between the Unix time epoch and when the file was last modified.
          * Defaults to a value of Date.now().
          * 最后一次修改时间戳，毫秒数 (文件上传后需要修改文件名再存储，所以取Date.now()为最后修改时间)
          * @default `Date.now()`
          */
         lastModified: number;
+        /**
+         * File hash value, as the unique identity of the file.The value is assigned to the parameter hash passed by
+         * the client (usually used to calculate the MD5 value of the file when uploading multipart and
+         * resuming upload from breakpoints), and uuid if not uploaded by the client.
+         * 文件hash值，作为文件唯一标识，赋值为客戶端传参hash（一般用于分片上传、断点续传时，
+         * 计算文件的md5值），若客户端未传，则赋值为uuid。
+         */
+        hash: string;
     }
     interface Files {
         [file: string]: File | File[];
     }
     interface IMultipartOptions {
         /**
-        * {Boolean} Parse multipart files, default true
-        * 是否解析文件数据，默认true，为 false 时无法解析文件，只处理文件以外的 multipart 参数
-        */
+         * {Boolean} Parse multipart files, default true
+         * 是否解析文件数据，默认true，为 false 时无法解析文件，只处理文件以外的 multipart 参数
+         * @default true
+         */
         fileParser?: boolean;
+        /**
+         * {Boolean}
+         * @default false
+         */
         /**
          * {Integer} Limits the file number.
          * 限制上传文件数量，默认Infinity（不限数量），
@@ -100,24 +119,25 @@ export declare namespace bodyParser {
          */
         maxFieldsSize?: number;
         /**
-         * {Boolean} Save local disk
-         * 是否存本地磁盘，默认为true，
-         * 若设为false,则文件不会被存储，可在onFileBegin钩子中对文件流进行转存或处理
-         * @default true
+         * {Boolean} If DIY file processing
+         * 是否自定义文件处理，默认为false，文件将会存储至本地磁盘，
+         * 若设为true,则文件不会走默认处理脚本，可在onFileBegin钩子中对文件流进行转存或处理，
+         * 如存到外部服务器、进行分片上传、断点续传等
+         * @default false
          */
-        uploadToLocal?: boolean;
+        ifDIY?: boolean;
         /**
          * {String} Sets the directory for placing file uploads in，
          * 前提是需要配置`uploadToLocal = true`，默认路径:
-         * `[uploadDir]/[date@yyyyMM]/[uuid].ext`
-         * 以当前年月分类存储，重命名为uuid,
+         * `[uploadDir]/[date@yyyyMM]/[hash].ext`
+         * 以当前年月分类存储，重命名为hash,
          * 请使用绝对路径
          * @premise uploadToLocal == true
          * @default os.tmpdir()
          */
         uploadDir?: string;
         /**
-         * {Function} Special callback on file begin. The function is executed directly by formidable.
+         * {Function} Special callback on file begin.
          * 文件处理前钩子函数，当配置uploadToLocal为false时，此钩子传回文件流fileStream，
          * 可使用`fileStream.on('data', (data)=>{}).on('close',()=>{})`监听文件流进行转存，
          * 可在此对file中的参数进行修改,如修改path以存到自定义位置
@@ -167,7 +187,7 @@ export declare namespace bodyParser {
          */
         jsonStrict?: boolean;
         /**
-         * {Object} Options to pass to the formidable multipart parser
+         * {Object} Options to pass to the form multipart parser
          * multipart 解析参数，只有在 multipart 设为 true 时有效
          */
         multiOptions?: IMultipartOptions;
