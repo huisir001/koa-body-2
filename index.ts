@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-06-23 17:32:27
+ * @LastEditTime: 2022-06-23 18:17:18
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -130,7 +130,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             onFileBegin: _onFileBegin
         } = opts
 
-        let raw = {}, files = {}, hasFile = false
+        let raw = {}, files = {}, hasFile = false, hasClose = false, fileEnd = false
 
         // Instantiation analysis tool
         let form = busboy({
@@ -167,7 +167,16 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             })
             // 结束
             .on('close', () => {
+                hasClose = true
+
                 if (!hasFile) {
+                    resolve({
+                        raw,
+                        files
+                    })
+                }
+
+                if (hasFile && fileEnd) {
                     resolve({
                         raw,
                         files
@@ -217,10 +226,14 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
                     files[fieldName] = file
                 }
 
-                resolve({
-                    raw,
-                    files
-                })
+                fileEnd = true
+
+                if (hasClose) {
+                    resolve({
+                        raw,
+                        files
+                    })
+                }
             })
         }
 

@@ -84,7 +84,7 @@ function multipartParse(ctx, opts) {
         const { fileParser: _fileParser = true, // 是否解析文件
         maxFiles: _maxFiles = Infinity, maxFileSize: _maxFileSize = 200 * 1024 * 1024, // 200m
         maxFields: _maxFields = 1000, maxFieldsSize: _maxFieldsSize = 2 * 1024 * 1024, ifDIY: _ifDIY = false, uploadDir: _uploadDir = os.tmpdir(), onFileBegin: _onFileBegin } = opts;
-        let raw = {}, files = {}, hasFile = false;
+        let raw = {}, files = {}, hasFile = false, hasClose = false, fileEnd = false;
         // Instantiation analysis tool
         let form = busboy({
             headers: ctx.req.headers,
@@ -121,7 +121,14 @@ function multipartParse(ctx, opts) {
         })
             // 结束
             .on('close', () => {
+            hasClose = true;
             if (!hasFile) {
+                resolve({
+                    raw,
+                    files
+                });
+            }
+            if (hasFile && fileEnd) {
                 resolve({
                     raw,
                     files
@@ -169,10 +176,13 @@ function multipartParse(ctx, opts) {
                 else {
                     files[fieldName] = file;
                 }
-                resolve({
-                    raw,
-                    files
-                });
+                fileEnd = true;
+                if (hasClose) {
+                    resolve({
+                        raw,
+                        files
+                    });
+                }
             });
         }
         // 执行解析
