@@ -37,11 +37,12 @@ const useBodyParser = (opts = {}) => {
             }
             // text parsing
             else if (_text && ctx.is('text/*')) {
-                body = await coBody.text(ctx, {
+                const text = await coBody.text(ctx, {
                     encoding: _encoding,
                     limit: _textLimit,
                     returnRawBody: false
                 });
+                body = { text };
             }
             // urlencoded parsing
             else if (_urlencoded && ctx.is('urlencoded')) {
@@ -83,8 +84,8 @@ function multipartParse(ctx, opts) {
     return new Promise((resolve, reject) => {
         const { fileParser: _fileParser = true, // 是否解析文件
         maxFiles: _maxFiles = Infinity, maxFileSize: _maxFileSize = 200 * 1024 * 1024, // 200m
-        maxFields: _maxFields = 1000, maxFieldsSize: _maxFieldsSize = 2 * 1024 * 1024, ifDIY: _ifDIY = false, uploadDir: _uploadDir = os.tmpdir(), onFileBegin: _onFileBegin } = opts;
-        let raw = {}, files = {}, hasFile = false, hasClose = false, fileEnd = false;
+        maxFields: _maxFields = 1000, maxFieldsSize: _maxFieldsSize = 56 * 1024, ifDIY: _ifDIY = false, uploadDir: _uploadDir = os.tmpdir(), onFileBegin: _onFileBegin } = opts;
+        let raw = {}, files = {}, hasFile = false, fileParseEnd = false, isClose = false;
         // Instantiation analysis tool
         let form = busboy({
             headers: ctx.req.headers,
@@ -114,25 +115,17 @@ function multipartParse(ctx, opts) {
         })
             // Do not parse the file
             .on('filesLimit', () => {
-            resolve({
-                raw,
-                files
-            });
+            resolve({ raw, files });
         })
             // 结束
             .on('close', () => {
-            hasClose = true;
+            isClose = true;
             if (!hasFile) {
-                resolve({
-                    raw,
-                    files
-                });
+                resolve({ raw, files });
+                return;
             }
-            if (hasFile && fileEnd) {
-                resolve({
-                    raw,
-                    files
-                });
+            if (fileParseEnd) {
+                resolve({ raw, files });
             }
         })
             .on('error', (err) => {
@@ -141,29 +134,31 @@ function multipartParse(ctx, opts) {
         // Parsing file
         if (_fileParser) {
             form.on('file', async (fieldName, fileStream, info) => {
-                // 是否传入file
                 hasFile = true;
+                // parse 解析
                 const { filename, mimeType } = info;
                 const file = {
                     name: filename,
                     extName: path.extname(filename),
                     type: mimeType,
-                    hash: uuidv4(),
+                    chunkId: uuidv4(),
                     lastModified: Date.now(),
                 };
                 // Hook before file processing
                 if (_onFileBegin) {
                     if (_ifDIY) {
-                        _onFileBegin(fieldName, file, fileStream);
+                        await _onFileBegin(ctx, fieldName, file, fileStream);
                     }
                     else {
-                        _onFileBegin(fieldName, file);
+                        await _onFileBegin(ctx, fieldName, file);
                     }
                 }
                 // File stream monitoring
-                await fileStreamListener(file, fileStream, _ifDIY, _uploadDir).catch((err) => {
-                    form.emit('error', err);
-                });
+                if (!_ifDIY) {
+                    await fileStreamListener(file, fileStream, _uploadDir).catch((err) => {
+                        form.emit('error', err);
+                    });
+                }
                 // Patch
                 if (files[fieldName]) {
                     if (Array.isArray(files[fieldName])) {
@@ -176,12 +171,9 @@ function multipartParse(ctx, opts) {
                 else {
                     files[fieldName] = file;
                 }
-                fileEnd = true;
-                if (hasClose) {
-                    resolve({
-                        raw,
-                        files
-                    });
+                fileParseEnd = true;
+                if (isClose) {
+                    resolve({ raw, files });
                 }
             });
         }
@@ -193,7 +185,7 @@ function multipartParse(ctx, opts) {
  * File stream monitoring
  * 文件流监听
  */
-function fileStreamListener(file, fileStream, _ifDIY, uploadDir) {
+function fileStreamListener(file, fileStream, uploadDir) {
     return new Promise((resolve, reject) => {
         let _size = 0;
         // Monitor to get data size
@@ -209,67 +201,55 @@ function fileStreamListener(file, fileStream, _ifDIY, uploadDir) {
             file.size = _size;
             file.unitSize = gb > 1 ? `${gb} GB` : mb > 1 ? `${mb} MB` : `${kb} KB`;
         });
-        // Deposit locally
-        if (!_ifDIY) {
-            const newName = file.hash + file.extName;
-            const data = new Date(), month = data.getMonth() + 1;
-            const yyyyMM = data.getFullYear() + (month < 10 ? '0' + month : '' + month);
-            const folder = path.join(uploadDir, yyyyMM);
-            const filepath = path.join(folder, newName);
-            const src = path.join(yyyyMM, newName);
-            // Check if the folder exists. If not, create a new folder.
-            if (!fs.existsSync(folder)) {
-                let pathtmp;
-                folder.split(path.sep).forEach((dirname) => {
-                    if (pathtmp) {
-                        pathtmp = path.join(pathtmp, dirname);
+        const newName = file.chunkId + file.extName;
+        const data = new Date(), month = data.getMonth() + 1;
+        const yyyyMM = data.getFullYear() + (month < 10 ? '0' + month : '' + month);
+        const folder = path.join(uploadDir, yyyyMM);
+        const filepath = path.join(folder, newName);
+        const src = path.join(yyyyMM, newName);
+        // Check if the folder exists. If not, create a new folder.
+        if (!fs.existsSync(folder)) {
+            let pathtmp;
+            folder.split(path.sep).forEach((dirname) => {
+                if (pathtmp) {
+                    pathtmp = path.join(pathtmp, dirname);
+                }
+                else {
+                    // If in a linux system, the value of the first dirname is empty, so the value assigned to "/"
+                    if (dirname) {
+                        pathtmp = dirname;
                     }
                     else {
-                        // If in a linux system, the value of the first dirname is empty, so the value assigned to "/"
-                        if (dirname) {
-                            pathtmp = dirname;
-                        }
-                        else {
-                            pathtmp = '/';
-                        }
+                        pathtmp = '/';
                     }
-                    if (!fs.existsSync(pathtmp)) {
-                        fs.mkdirSync(pathtmp);
-                    }
-                });
-            }
-            // Create a write stream
-            const ws = fs.createWriteStream(filepath);
-            // Write
-            fileStream.pipe(ws)
-                .on('error', (err) => {
-                reject(err);
-            })
-                .on('close', () => {
-                resolve(void 0);
-            })
-                .on('finish', () => {
-                file.newName = newName;
-                file.path = filepath;
-                file.src = src;
-                file.lastModified = Date.now();
-            });
-            // Error
-            fileStream.on('error', (err) => {
-                // The write stream will not be actively closed and needs to be destroyed.
-                ws.destroy();
-                reject(err);
+                }
+                if (!fs.existsSync(pathtmp)) {
+                    fs.mkdirSync(pathtmp);
+                }
             });
         }
-        else {
-            fileStream
-                .on('close', () => {
-                resolve(void 0);
-            })
-                .on('error', (err) => {
-                reject(err);
-            });
-        }
+        // Create a write stream
+        const ws = fs.createWriteStream(filepath);
+        // Write
+        fileStream.pipe(ws)
+            .on('error', (err) => {
+            reject(err);
+        })
+            .on('close', () => {
+            resolve(void 0);
+        })
+            .on('finish', () => {
+            file.newName = newName;
+            file.path = filepath;
+            file.src = src;
+            file.lastModified = Date.now();
+        });
+        // Error
+        fileStream.on('error', (err) => {
+            // The write stream will not be actively closed and needs to be destroyed.
+            ws.destroy();
+            reject(err);
+        });
     });
 }
 export default useBodyParser;

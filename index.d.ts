@@ -78,7 +78,7 @@ export declare namespace bodyParser {
          * fragment is used. Uuid is used for assignment here).
          * 文件唯一标识，（若为分片上传机制，则为文件片段唯一标识，这里赋值使用uuid）。
          */
-        hash: string;
+        chunkId: string;
     }
     interface Files {
         [file: string]: File | File[];
@@ -112,8 +112,8 @@ export declare namespace bodyParser {
         maxFields?: number;
         /**
          * {Integer} Limits the amount of memory all fields together (except files) can allocate in bytes.
-         * If this value is exceeded, an 'error' event is emitted, default 2mb
-         * @default 2 * 1024 * 1024
+         * If this value is exceeded, an 'error' event is emitted, default 56kb
+         * @default 56 * 1024
          */
         maxFieldsSize?: number;
         /**
@@ -127,8 +127,8 @@ export declare namespace bodyParser {
         /**
          * {String} Sets the directory for placing file uploads in，
          * 前提是需要配置`uploadToLocal = true`，默认路径:
-         * `[uploadDir]/[date@yyyyMM]/[hash].ext`
-         * 以当前年月分类存储，重命名为hash,
+         * `[uploadDir]/[date@yyyyMM]/[chunkId].ext`
+         * 以当前年月分类存储，重命名为chunkId,
          * 请使用绝对路径
          * @premise uploadToLocal == true
          * @default os.tmpdir()
@@ -140,28 +140,33 @@ export declare namespace bodyParser {
          * 可使用`fileStream.on('data', (data)=>{}).on('close',()=>{})`监听文件流进行转存，
          * 可在此对file中的参数进行修改,如修改path以存到自定义位置
          */
-        onFileBegin?: (fieldName: string, file: File, fileStream?: Readable) => void;
+        onFileBegin?: (ctx: Koa.ParameterizedContext<Promise<void>, Koa.DefaultContext, any>, fieldName: string, file: File, fileStream?: Readable) => void | Promise<any>;
     }
     interface IOptions {
         /**
          * {String|Integer} The byte (if integer) limit of the JSON body, default 1mb
+         * @default 1mb
          */
         jsonLimit?: string | number;
         /**
          * {String|Integer} The byte (if integer) limit of the form body, default 56kb
+         * @default 56kb
          */
         formLimit?: string | number;
         /**
          * {String|Integer} The byte (if integer) limit of the text body, default 56kb
+         * @default 56kb
          */
         textLimit?: string | number;
         /**
          * {String} Sets encoding for incoming form fields, default utf-8
+         * @default utf-8
          */
         encoding?: string;
         /**
          * {Boolean} Parse multipart bodies, default false
          * 是否解析multipart数据，默认false，为false时无法得到文件及fields参数
+         * @default false
          */
         multipart?: boolean;
         /**

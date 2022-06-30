@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-06-23 18:28:29
+ * @LastEditTime: 2022-06-30 17:11:47
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -74,11 +74,12 @@ const useBodyParser = (opts: bodyParser.IOptions = {}): Koa.Middleware<Promise<v
             }
             // text parsing
             else if (_text && ctx.is('text/*')) {
-                body = await coBody.text(ctx, {
+                const text = await coBody.text(ctx, {
                     encoding: _encoding,
                     limit: _textLimit,
                     returnRawBody: false
                 })
+                body = { text }
             }
             // urlencoded parsing
             else if (_urlencoded && ctx.is('urlencoded')) {
@@ -124,13 +125,13 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             maxFiles: _maxFiles = Infinity,
             maxFileSize: _maxFileSize = 200 * 1024 * 1024, // 200m
             maxFields: _maxFields = 1000,
-            maxFieldsSize: _maxFieldsSize = 2 * 1024 * 1024,
+            maxFieldsSize: _maxFieldsSize = 56 * 1024,
             ifDIY: _ifDIY = false,
             uploadDir: _uploadDir = os.tmpdir(),
             onFileBegin: _onFileBegin
         } = opts
 
-        let raw = {}, files = {}, hasFile = false, hasClose = false, fileEnd = false
+        let raw = {}, files = {}, hasFile = false, fileParseEnd = false, isClose = false;
 
         // Instantiation analysis tool
         let form = busboy({
@@ -160,28 +161,21 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             })
             // Do not parse the file
             .on('filesLimit', () => {
-                resolve({
-                    raw,
-                    files
-                })
+                resolve({ raw, files })
             })
             // 结束
             .on('close', () => {
-                hasClose = true
+                isClose = true
 
                 if (!hasFile) {
-                    resolve({
-                        raw,
-                        files
-                    })
+                    resolve({ raw, files })
+                    return
                 }
 
-                if (hasFile && fileEnd) {
-                    resolve({
-                        raw,
-                        files
-                    })
+                if (fileParseEnd) {
+                    resolve({ raw, files })
                 }
+
             })
             .on('error', (err) => {
                 reject(err)
@@ -190,30 +184,32 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
         // Parsing file
         if (_fileParser) {
             form.on('file', async (fieldName, fileStream, info) => {
-                // 是否传入file
                 hasFile = true
+                // parse 解析
                 const { filename, mimeType } = info
                 const file: bodyParser.File = {
                     name: filename,
                     extName: path.extname(filename),
                     type: mimeType,
-                    hash: uuidv4(),
+                    chunkId: uuidv4(),
                     lastModified: Date.now(),
                 }
 
                 // Hook before file processing
                 if (_onFileBegin) {
                     if (_ifDIY) {
-                        _onFileBegin(fieldName, file, fileStream)
+                        await _onFileBegin(ctx, fieldName, file, fileStream)
                     } else {
-                        _onFileBegin(fieldName, file)
+                        await _onFileBegin(ctx, fieldName, file)
                     }
                 }
 
                 // File stream monitoring
-                await fileStreamListener(file, fileStream, _ifDIY, _uploadDir).catch((err) => {
-                    form.emit('error', err)
-                })
+                if (!_ifDIY) {
+                    await fileStreamListener(file, fileStream, _uploadDir).catch((err) => {
+                        form.emit('error', err)
+                    })
+                }
 
                 // Patch
                 if (files[fieldName]) {
@@ -226,13 +222,10 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
                     files[fieldName] = file
                 }
 
-                fileEnd = true
+                fileParseEnd = true
 
-                if (hasClose) {
-                    resolve({
-                        raw,
-                        files
-                    })
+                if (isClose) {
+                    resolve({ raw, files })
                 }
             })
         }
@@ -247,7 +240,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
  * File stream monitoring
  * 文件流监听
  */
-function fileStreamListener(file: bodyParser.File, fileStream: Readable, _ifDIY: boolean, uploadDir: string) {
+function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadDir: string) {
     return new Promise((resolve, reject) => {
         let _size = 0
 
@@ -268,69 +261,57 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, _ifDIY:
                 file.unitSize = gb > 1 ? `${gb} GB` : mb > 1 ? `${mb} MB` : `${kb} KB`
             })
 
-        // Deposit locally
-        if (!_ifDIY) {
-            const newName = file.hash + file.extName
-            const data = new Date(), month = data.getMonth() + 1
-            const yyyyMM = data.getFullYear() + (month < 10 ? '0' + month : '' + month)
-            const folder = path.join(uploadDir, yyyyMM)
-            const filepath = path.join(folder, newName)
-            const src = path.join(yyyyMM, newName)
+        const newName = file.chunkId + file.extName
+        const data = new Date(), month = data.getMonth() + 1
+        const yyyyMM = data.getFullYear() + (month < 10 ? '0' + month : '' + month)
+        const folder = path.join(uploadDir, yyyyMM)
+        const filepath = path.join(folder, newName)
+        const src = path.join(yyyyMM, newName)
 
-            // Check if the folder exists. If not, create a new folder.
-            if (!fs.existsSync(folder)) {
-                let pathtmp: string
-                folder.split(path.sep).forEach((dirname) => {
-                    if (pathtmp) {
-                        pathtmp = path.join(pathtmp, dirname)
+        // Check if the folder exists. If not, create a new folder.
+        if (!fs.existsSync(folder)) {
+            let pathtmp: string
+            folder.split(path.sep).forEach((dirname) => {
+                if (pathtmp) {
+                    pathtmp = path.join(pathtmp, dirname)
+                } else {
+                    // If in a linux system, the value of the first dirname is empty, so the value assigned to "/"
+                    if (dirname) {
+                        pathtmp = dirname
                     } else {
-                        // If in a linux system, the value of the first dirname is empty, so the value assigned to "/"
-                        if (dirname) {
-                            pathtmp = dirname
-                        } else {
-                            pathtmp = '/'
-                        }
+                        pathtmp = '/'
                     }
-                    if (!fs.existsSync(pathtmp)) {
-                        fs.mkdirSync(pathtmp)
-                    }
-                })
-            }
+                }
+                if (!fs.existsSync(pathtmp)) {
+                    fs.mkdirSync(pathtmp)
+                }
+            })
+        }
 
-            // Create a write stream
-            const ws = fs.createWriteStream(filepath)
+        // Create a write stream
+        const ws = fs.createWriteStream(filepath)
 
-            // Write
-            fileStream.pipe(ws)
-                .on('error', (err) => {
-                    reject(err)
-                })
-                .on('close', () => {
-                    resolve(void 0)
-                })
-                .on('finish', () => {
-                    file.newName = newName
-                    file.path = filepath
-                    file.src = src
-                    file.lastModified = Date.now()
-                })
-
-            // Error
-            fileStream.on('error', (err) => {
-                // The write stream will not be actively closed and needs to be destroyed.
-                ws.destroy()
+        // Write
+        fileStream.pipe(ws)
+            .on('error', (err) => {
                 reject(err)
             })
+            .on('close', () => {
+                resolve(void 0)
+            })
+            .on('finish', () => {
+                file.newName = newName
+                file.path = filepath
+                file.src = src
+                file.lastModified = Date.now()
+            })
 
-        } else {
-            fileStream
-                .on('close', () => {
-                    resolve(void 0)
-                })
-                .on('error', (err) => {
-                    reject(err)
-                })
-        }
+        // Error
+        fileStream.on('error', (err) => {
+            // The write stream will not be actively closed and needs to be destroyed.
+            ws.destroy()
+            reject(err)
+        })
     })
 }
 
@@ -411,7 +392,7 @@ export namespace bodyParser {
          * fragment is used. Uuid is used for assignment here).
          * 文件唯一标识，（若为分片上传机制，则为文件片段唯一标识，这里赋值使用uuid）。
          */
-        hash: string
+        chunkId: string
     }
 
     export interface Files {
@@ -453,8 +434,8 @@ export namespace bodyParser {
 
         /**
          * {Integer} Limits the amount of memory all fields together (except files) can allocate in bytes.
-         * If this value is exceeded, an 'error' event is emitted, default 2mb
-         * @default 2 * 1024 * 1024
+         * If this value is exceeded, an 'error' event is emitted, default 56kb
+         * @default 56 * 1024
          */
         maxFieldsSize?: number
 
@@ -470,8 +451,8 @@ export namespace bodyParser {
         /**
          * {String} Sets the directory for placing file uploads in，
          * 前提是需要配置`uploadToLocal = true`，默认路径:
-         * `[uploadDir]/[date@yyyyMM]/[hash].ext`
-         * 以当前年月分类存储，重命名为hash,
+         * `[uploadDir]/[date@yyyyMM]/[chunkId].ext`
+         * 以当前年月分类存储，重命名为chunkId,
          * 请使用绝对路径
          * @premise uploadToLocal == true 
          * @default os.tmpdir()
@@ -484,33 +465,41 @@ export namespace bodyParser {
          * 可使用`fileStream.on('data', (data)=>{}).on('close',()=>{})`监听文件流进行转存，
          * 可在此对file中的参数进行修改,如修改path以存到自定义位置
          */
-        onFileBegin?: (fieldName: string, file: File, fileStream?: Readable) => void
+        onFileBegin?: (
+            ctx: Koa.ParameterizedContext<Promise<void>, Koa.DefaultContext, any>,
+            fieldName: string, file: File, fileStream?: Readable
+        ) => void | Promise<any>
     }
 
     export interface IOptions {
         /**
          * {String|Integer} The byte (if integer) limit of the JSON body, default 1mb
+         * @default 1mb
          */
         jsonLimit?: string | number;
 
         /**
          * {String|Integer} The byte (if integer) limit of the form body, default 56kb
+         * @default 56kb
          */
         formLimit?: string | number;
 
         /**
          * {String|Integer} The byte (if integer) limit of the text body, default 56kb
+         * @default 56kb
          */
         textLimit?: string | number;
 
         /**
          * {String} Sets encoding for incoming form fields, default utf-8
+         * @default utf-8
          */
         encoding?: string;
 
         /**
          * {Boolean} Parse multipart bodies, default false
          * 是否解析multipart数据，默认false，为false时无法得到文件及fields参数
+         * @default false
          */
         multipart?: boolean;
 
