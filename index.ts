@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-06-30 17:11:47
+ * @LastEditTime: 2022-06-30 17:31:54
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -450,18 +450,18 @@ export namespace bodyParser {
 
         /**
          * {String} Sets the directory for placing file uploads in，
-         * 前提是需要配置`uploadToLocal = true`，默认路径:
+         * 前提是配置`ifDIY = false`（默认false），默认路径:
          * `[uploadDir]/[date@yyyyMM]/[chunkId].ext`
          * 以当前年月分类存储，重命名为chunkId,
          * 请使用绝对路径
-         * @premise uploadToLocal == true 
+         * @premise ifDIY == false 
          * @default os.tmpdir()
          */
         uploadDir?: string
 
         /**
          * {Function} Special callback on file begin.
-         * 文件处理前钩子函数，当配置uploadToLocal为false时，此钩子传回文件流fileStream，
+         * 文件处理前钩子函数，当配置`ifDIY = true`时，此钩子传回文件流fileStream，
          * 可使用`fileStream.on('data', (data)=>{}).on('close',()=>{})`监听文件流进行转存，
          * 可在此对file中的参数进行修改,如修改path以存到自定义位置
          */
