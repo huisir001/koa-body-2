@@ -85,7 +85,7 @@ function multipartParse(ctx, opts) {
         const { fileParser: _fileParser = true, // 是否解析文件
         maxFiles: _maxFiles = Infinity, maxFileSize: _maxFileSize = 200 * 1024 * 1024, // 200m
         maxFields: _maxFields = 1000, maxFieldsSize: _maxFieldsSize = 56 * 1024, ifDIY: _ifDIY = false, uploadDir: _uploadDir = os.tmpdir(), onFileBegin: _onFileBegin } = opts;
-        let raw = {}, files = {}, hasFile = false, fileParseEnd = false, isClose = false;
+        let raw = {}, files = {}, expectedFileNum = 0, actualFileNum = 0, isClose = false;
         // Instantiation analysis tool
         let form = busboy({
             headers: ctx.req.headers,
@@ -120,11 +120,13 @@ function multipartParse(ctx, opts) {
             // 结束
             .on('close', () => {
             isClose = true;
-            if (!hasFile) {
+            if (expectedFileNum === 0) {
                 resolve({ raw, files });
                 return;
             }
-            if (fileParseEnd) {
+            if (expectedFileNum === actualFileNum) {
+                expectedFileNum = 0;
+                actualFileNum = 0;
                 resolve({ raw, files });
             }
         })
@@ -134,7 +136,7 @@ function multipartParse(ctx, opts) {
         // Parsing file
         if (_fileParser) {
             form.on('file', async (fieldName, fileStream, info) => {
-                hasFile = true;
+                expectedFileNum++;
                 // parse 解析
                 const { filename, mimeType } = info;
                 const file = {
@@ -171,8 +173,10 @@ function multipartParse(ctx, opts) {
                 else {
                     files[fieldName] = file;
                 }
-                fileParseEnd = true;
-                if (isClose) {
+                actualFileNum++;
+                if (isClose && expectedFileNum === actualFileNum) {
+                    expectedFileNum = 0;
+                    actualFileNum = 0;
                     resolve({ raw, files });
                 }
             });

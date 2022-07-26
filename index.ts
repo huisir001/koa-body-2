@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-06-30 17:31:54
+ * @LastEditTime: 2022-07-26 14:37:33
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -131,7 +131,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             onFileBegin: _onFileBegin
         } = opts
 
-        let raw = {}, files = {}, hasFile = false, fileParseEnd = false, isClose = false;
+        let raw = {}, files = {}, expectedFileNum = 0, actualFileNum = 0, isClose = false;
 
         // Instantiation analysis tool
         let form = busboy({
@@ -167,12 +167,14 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             .on('close', () => {
                 isClose = true
 
-                if (!hasFile) {
+                if (expectedFileNum === 0) {
                     resolve({ raw, files })
                     return
                 }
 
-                if (fileParseEnd) {
+                if (expectedFileNum === actualFileNum) {
+                    expectedFileNum = 0
+                    actualFileNum = 0
                     resolve({ raw, files })
                 }
 
@@ -184,7 +186,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
         // Parsing file
         if (_fileParser) {
             form.on('file', async (fieldName, fileStream, info) => {
-                hasFile = true
+                expectedFileNum++
                 // parse 解析
                 const { filename, mimeType } = info
                 const file: bodyParser.File = {
@@ -222,9 +224,11 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
                     files[fieldName] = file
                 }
 
-                fileParseEnd = true
+                actualFileNum++
 
-                if (isClose) {
+                if (isClose && expectedFileNum === actualFileNum) {
+                    expectedFileNum = 0
+                    actualFileNum = 0
                     resolve({ raw, files })
                 }
             })
