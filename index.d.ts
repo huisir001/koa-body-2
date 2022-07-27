@@ -100,7 +100,7 @@ export declare namespace bodyParser {
          */
         maxFiles?: number | typeof Infinity;
         /**
-         * {Integer} Limits the amount of memory all fields together (except files) can allocate in bytes. If this value is exceeded, an 'error' event is emitted. The default size is 20MB.
+         * {Integer} Limits the amount of memory all fields together (except files) can allocate in bytes. If this value is exceeded, an 'error' event is emitted.
          * 限制上传文件大小，默认`Infinity`（不限大小），单位bytes
          * @default Infinity
          * @example 200 * 1024 * 1024 (200M)

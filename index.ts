@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-07-27 15:18:05
+ * @LastEditTime: 2022-07-27 15:34:07
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -429,7 +429,7 @@ export namespace bodyParser {
         maxFiles?: number | typeof Infinity
 
         /**
-         * {Integer} Limits the amount of memory all fields together (except files) can allocate in bytes. If this value is exceeded, an 'error' event is emitted. The default size is 20MB.
+         * {Integer} Limits the amount of memory all fields together (except files) can allocate in bytes. If this value is exceeded, an 'error' event is emitted. 
          * 限制上传文件大小，默认`Infinity`（不限大小），单位bytes
          * @default Infinity
          * @example 200 * 1024 * 1024 (200M)
