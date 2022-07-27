@@ -30,6 +30,29 @@ npm install koa-body-2
 npm install koa koa-body-2 # Note that Koa requires Node.js 7.6.0+ for async/await support
 ```
 
+Default file storage:      
+
+```js
+import Koa from 'koa'
+import koaBody2 from 'koa-body-2'
+
+const app = new Koa();
+
+app.use(koaBody2({multipart: true}));
+
+app.use(ctx => {
+    ctx.body = `Request incoming: ${JSON.stringify({
+        body: ctx.request.body,
+        raw: ctx.request.raw,
+        files: ctx.request.files
+    })}`;
+});
+
+app.listen(8080);
+```
+
+Custom file storage:      
+
 ```js
 import Koa from 'koa'
 import koaBody2 from 'koa-body-2'
@@ -80,7 +103,10 @@ const koaBodyOpts = {
                     const filepath = path.join(os.tmpdir(), newName)
 
                     // Create a write stream
-                    const ws = fs.createWriteStream(filepath)
+                    // To distinguish between complete and incomplete files, 
+                    // use a new suffix here and wait for the file transfer to complete before renaming.
+                    const tempPath = filepath + '.temp'
+                    const ws = fs.createWriteStream(tempPath)
 
                     // write
                     fileStream.pipe(ws)
@@ -88,6 +114,8 @@ const koaBodyOpts = {
                             // Handling error messages
                         })
                         .on('close', () => {
+                            // Rename and remove temp suffix
+                            fs.renameSync(tempPath, filepath)
                             resolve(void 0)
                         })
                         .on('finish', () => {
@@ -127,6 +155,14 @@ app.listen(8080);
 ```
 
 ## Example
+
+Default file storage:      
+
+```sh
+cd example
+node ex.js
+```
+Or custom file storage:       
 
 ```sh
 cd example

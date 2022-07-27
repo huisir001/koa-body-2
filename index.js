@@ -83,7 +83,7 @@ const useBodyParser = (opts = {}) => {
 function multipartParse(ctx, opts) {
     return new Promise((resolve, reject) => {
         const { fileParser: _fileParser = true, // 是否解析文件
-        maxFiles: _maxFiles = Infinity, maxFileSize: _maxFileSize = 200 * 1024 * 1024, // 200m
+        maxFiles: _maxFiles = Infinity, maxFileSize: _maxFileSize = Infinity, // 不限大小
         maxFields: _maxFields = 1000, maxFieldsSize: _maxFieldsSize = 56 * 1024, ifDIY: _ifDIY = false, uploadDir: _uploadDir = os.tmpdir(), onFileBegin: _onFileBegin } = opts;
         let raw = {}, files = {}, expectedFileNum = 0, actualFileNum = 0, isClose = false;
         // Instantiation analysis tool
