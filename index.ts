@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-07-26 14:37:33
+ * @LastEditTime: 2022-07-27 14:44:55
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -293,7 +293,10 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
         }
 
         // Create a write stream
-        const ws = fs.createWriteStream(filepath)
+        // To distinguish between complete and incomplete files, 
+        // use a new suffix here and wait for the file transfer to complete before renaming.
+        const tempPath = path.join(filepath, '.temp')
+        const ws = fs.createWriteStream(tempPath)
 
         // Write
         fileStream.pipe(ws)
@@ -301,6 +304,8 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
                 reject(err)
             })
             .on('close', () => {
+                // Rename and remove temp suffix
+                fs.renameSync(tempPath, filepath)
                 resolve(void 0)
             })
             .on('finish', () => {
