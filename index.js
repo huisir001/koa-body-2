@@ -235,7 +235,7 @@ function fileStreamListener(file, fileStream, uploadDir) {
         // Create a write stream
         // To distinguish between complete and incomplete files, 
         // use a new suffix here and wait for the file transfer to complete before renaming.
-        const tempPath = path.join(filepath, '.temp');
+        const tempPath = filepath + '.temp';
         const ws = fs.createWriteStream(tempPath);
         // Write
         fileStream.pipe(ws)

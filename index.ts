@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-07-27 14:44:55
+ * @LastEditTime: 2022-07-27 14:51:51
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -295,7 +295,7 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
         // Create a write stream
         // To distinguish between complete and incomplete files, 
         // use a new suffix here and wait for the file transfer to complete before renaming.
-        const tempPath = path.join(filepath, '.temp')
+        const tempPath = filepath + '.temp'
         const ws = fs.createWriteStream(tempPath)
 
         // Write
