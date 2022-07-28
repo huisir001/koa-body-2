@@ -2,7 +2,7 @@
  * @Description: example1
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-23 11:14:03
- * @LastEditTime: 2022-07-28 17:51:55
+ * @LastEditTime: 2022-07-28 19:04:55
  */
 import Koa from 'koa'
 import koaBody2 from '../index.js'
@@ -56,7 +56,8 @@ const koaBodyOpts = {
                     // write
                     fileStream.pipe(ws)
                         .on('error', (err) => {
-                            // Handling error messages
+                            // If the write stream is not destroyed here, the file will be occupied and cannot be unlink.
+                            ws.destroy()
                             // Transfer error directly delete cache file
                             fs.unlink(tempPath, (err) => {
                                 if (err && err.errno != -4058) {
@@ -65,11 +66,9 @@ const koaBodyOpts = {
                             })
                             reject(err)
                         })
-                        .on('close', () => {
-                            // Close writeStream
-                            ws.destroy()
-                        })
                         .on('finish', () => {
+                            // If the write stream is not destroyed here, the file will be occupied and cannot be rename.
+                            ws.destroy()
                             // Rename and remove temp suffix
                             fs.rename(tempPath, filepath, (err) => {
                                 if (err) {

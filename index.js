@@ -270,6 +270,8 @@ function fileStreamListener(file, fileStream, uploadDir, deleteTimeout) {
         let deleteTimer = null;
         if (deleteTimeout !== Infinity) {
             deleteTimer = setTimeout(() => {
+                // If the write stream is not destroyed here, the file will be occupied and cannot be deleted.
+                ws.destroy();
                 // Delete cach
                 fs.unlink(tempPath, (err) => {
                     if (err && err.errno != -4058) {
@@ -290,6 +292,8 @@ function fileStreamListener(file, fileStream, uploadDir, deleteTimeout) {
         // Write
         fileStream.pipe(ws)
             .on('error', (err) => {
+            // If the write stream is not destroyed here, the file will be occupied and cannot be deleted.
+            ws.destroy();
             // Transfer error directly delete cache file
             fs.unlink(tempPath, (err) => {
                 if (err && err.errno != -4058) {
@@ -303,11 +307,9 @@ function fileStreamListener(file, fileStream, uploadDir, deleteTimeout) {
             }
             reject(err);
         })
-            .on('close', () => {
-            // Close writeStream
-            ws.destroy();
-        })
             .on('finish', () => {
+            // If the write stream is not destroyed here, the file will be occupied and cannot be rename.
+            ws.destroy();
             // Rename and remove temp suffix
             fs.rename(tempPath, filepath, (err) => {
                 if (err) {

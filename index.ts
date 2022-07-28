@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-07-28 17:47:13
+ * @LastEditTime: 2022-07-28 19:05:30
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -330,6 +330,8 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
         let deleteTimer: NodeJS.Timeout = null
         if (deleteTimeout !== Infinity) {
             deleteTimer = setTimeout(() => {
+                // If the write stream is not destroyed here, the file will be occupied and cannot be deleted.
+                ws.destroy()
                 // Delete cach
                 fs.unlink(tempPath, (err) => {
                     if (err && err.errno != -4058) {
@@ -351,6 +353,8 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
         // Write
         fileStream.pipe(ws)
             .on('error', (err) => {
+                // If the write stream is not destroyed here, the file will be occupied and cannot be deleted.
+                ws.destroy()
                 // Transfer error directly delete cache file
                 fs.unlink(tempPath, (err) => {
                     if (err && err.errno != -4058) {
@@ -362,14 +366,11 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
                     clearTimeout(deleteTimer)
                     deleteTimer = null
                 }
-
                 reject(err)
             })
-            .on('close', () => {
-                // Close writeStream
-                ws.destroy()
-            })
             .on('finish', () => {
+                // If the write stream is not destroyed here, the file will be occupied and cannot be rename.
+                ws.destroy()
                 // Rename and remove temp suffix
                 fs.rename(tempPath, filepath, (err) => {
                     if (err) {
