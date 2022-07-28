@@ -112,23 +112,43 @@ const koaBodyOpts = {
                     fileStream.pipe(ws)
                         .on('error', (err) => {
                             // Handling error messages
+                            // Transfer error directly delete cache file
+                            fs.unlink(tempPath, (err) => {
+                                if (err && err.errno != -4058) {
+                                    console.error(err)
+                                }
+                            })
+                            reject(err)
                         })
                         .on('close', () => {
-                            // Rename and remove temp suffix
-                            fs.renameSync(tempPath, filepath)
-                            resolve(void 0)
+                            // Close writeStream
+                            ws.destroy()
                         })
                         .on('finish', () => {
                             file.newName = newName
                             file.path = filepath
                             // file.src = 
                             file.lastModified = Date.now()
+                            // Rename and remove temp suffix
+                            fs.rename(tempPath, filepath, (err) => {
+                                if (err) {
+                                    reject(err)
+                                } else {
+                                    resolve(void 0)
+                                }
+                            })
                         })
 
                     // fileStream err
                     fileStream.on('error', (err) => {
                         // The write stream will not be actively closed and needs to be destroyed.
                         ws.destroy()
+                        // Transfer error directly delete cache file
+                        fs.unlink(tempPath, (err) => {
+                            if (err && err.errno != -4058) {
+                                console.error(err)
+                            }
+                        })
                         reject(err)
                     })
                 }
@@ -162,11 +182,18 @@ Default file storage:
 cd example
 node ex.js
 ```
-Or custom file storage:       
+Or custom file stream storage:       
 
 ```sh
 cd example
 node ex1.js
+```
+
+Or custom file path:       
+
+```sh
+cd example
+node ex2.js
 ```
 
 ```sh

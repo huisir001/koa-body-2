@@ -98,14 +98,14 @@ export declare namespace bodyParser {
          * {Integer} Limits the file number.
          * 限制上传文件数量，默认Infinity（不限数量），
          */
-        maxFiles?: number | typeof Infinity;
+        maxFiles?: number;
         /**
          * {Integer} Limits the amount of memory all fields together (except files) can allocate in bytes. If this value is exceeded, an 'error' event is emitted.
          * 限制上传文件大小，默认`Infinity`（不限大小），单位bytes
          * @default Infinity
          * @example 200 * 1024 * 1024 (200M)
          */
-        maxFileSize?: number | typeof Infinity;
+        maxFileSize?: number;
         /**
          * {Integer} Limits the number of fields that the querystring parser will decode, default 1000
          * @default 1000
@@ -135,6 +135,17 @@ export declare namespace bodyParser {
          * @default os.tmpdir()
          */
         uploadDir?: string;
+        /**
+         * {Integer} The file timeout is deleted, and the timeout is configured here.
+         * It is generally used for periodic cleaning of cache files.
+         * Start timing before uploading files.
+         * In milliseconds. Default Infinity (not deleted).
+         * 文件超时删除，这里配置超时时间。一般用于缓存文件的定期清理。文件上传之前开始计时。
+         * 单位为毫秒。默认`Infinity`（不删除）
+         * @default Infinity
+         * @example 1000 * 60 * 30 (30 minutes)
+         */
+        deleteTimeout?: number;
         /**
          * {Function} Special callback on file begin.
          * 文件处理前钩子函数，当配置`ifDIY = true`时，此钩子传回文件流fileStream，

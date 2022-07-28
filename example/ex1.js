@@ -2,7 +2,7 @@
  * @Description: example1
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-23 11:14:03
- * @LastEditTime: 2022-07-21 17:32:23
+ * @LastEditTime: 2022-07-28 16:41:45
  */
 import Koa from 'koa'
 import koaBody2 from '../index.js'
@@ -57,21 +57,43 @@ const koaBodyOpts = {
                     fileStream.pipe(ws)
                         .on('error', (err) => {
                             // Handling error messages
+                            // Transfer error directly delete cache file
+                            fs.unlink(tempPath, (err) => {
+                                if (err && err.errno != -4058) {
+                                    console.error(err)
+                                }
+                            })
+                            reject(err)
                         })
                         .on('close', () => {
-                            resolve(void (0))
+                            // Close writeStream
+                            ws.destroy()
                         })
                         .on('finish', () => {
                             file.newName = newName
                             file.path = filepath
                             // file.src = 
                             file.lastModified = Date.now()
+                            // Rename and remove temp suffix
+                            fs.rename(tempPath, filepath, (err) => {
+                                if (err) {
+                                    reject(err)
+                                } else {
+                                    resolve(void 0)
+                                }
+                            })
                         })
 
                     // fileStream err
                     fileStream.on('error', (err) => {
                         // The write stream will not be actively closed and needs to be destroyed.
                         ws.destroy()
+                        // Transfer error directly delete cache file
+                        fs.unlink(tempPath, (err) => {
+                            if (err && err.errno != -4058) {
+                                console.error(err)
+                            }
+                        })
                         reject(err)
                     })
                 }

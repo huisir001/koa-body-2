@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-07-27 15:34:07
+ * @LastEditTime: 2022-07-28 16:25:57
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -115,6 +115,17 @@ const useBodyParser = (opts: bodyParser.IOptions = {}): Koa.Middleware<Promise<v
 }
 
 /**
+ * Detect numeric type
+ */
+function numberOptTest(opts: [string, number][]) {
+    opts.forEach(element => {
+        if (typeof element[1] !== 'number') {
+            throw new Error(`The type of option '${element[0]}' has to be a number!`);
+        }
+    })
+}
+
+/**
  * parse multipart
  * 解析form表单数据
  */
@@ -128,8 +139,18 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             maxFieldsSize: _maxFieldsSize = 56 * 1024,
             ifDIY: _ifDIY = false,
             uploadDir: _uploadDir = os.tmpdir(),
+            deleteTimeout: _deleteTimeout = Infinity, // 超时删除，默认不删除
             onFileBegin: _onFileBegin
         } = opts
+
+        // 检测数字类型
+        numberOptTest([
+            ['maxFiles', _maxFiles],
+            ['maxFileSize', _maxFileSize],
+            ['maxFields', _maxFields],
+            ['maxFieldsSize', _maxFieldsSize],
+            ['deleteTimeout', _deleteTimeout]
+        ])
 
         let raw = {}, files = {}, expectedFileNum = 0, actualFileNum = 0, isClose = false;
 
@@ -163,8 +184,8 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
             .on('filesLimit', () => {
                 resolve({ raw, files })
             })
-            // 结束
-            .on('close', () => {
+            // 完成
+            .on('finish', () => {
                 isClose = true
 
                 if (expectedFileNum === 0) {
@@ -177,7 +198,6 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
                     actualFileNum = 0
                     resolve({ raw, files })
                 }
-
             })
             .on('error', (err) => {
                 reject(err)
@@ -208,7 +228,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
 
                 // File stream monitoring
                 if (!_ifDIY) {
-                    await fileStreamListener(file, fileStream, _uploadDir).catch((err) => {
+                    await fileStreamListener(file, fileStream, _uploadDir, _deleteTimeout).catch((err) => {
                         form.emit('error', err)
                     })
                 }
@@ -244,7 +264,7 @@ function multipartParse(ctx: Koa.ParameterizedContext<Promise<void>, Koa.Default
  * File stream monitoring
  * 文件流监听
  */
-function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadDir: string) {
+function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadDir: string, deleteTimeout: number) {
     return new Promise((resolve, reject) => {
         let _size = 0
 
@@ -265,31 +285,39 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
                 file.unitSize = gb > 1 ? `${gb} GB` : mb > 1 ? `${mb} MB` : `${kb} KB`
             })
 
-        const newName = file.chunkId + file.extName
-        const data = new Date(), month = data.getMonth() + 1
-        const yyyyMM = data.getFullYear() + (month < 10 ? '0' + month : '' + month)
-        const folder = path.join(uploadDir, yyyyMM)
-        const filepath = path.join(folder, newName)
-        const src = path.join(yyyyMM, newName)
-
-        // Check if the folder exists. If not, create a new folder.
-        if (!fs.existsSync(folder)) {
-            let pathtmp: string
-            folder.split(path.sep).forEach((dirname) => {
-                if (pathtmp) {
-                    pathtmp = path.join(pathtmp, dirname)
-                } else {
-                    // If in a linux system, the value of the first dirname is empty, so the value assigned to "/"
-                    if (dirname) {
-                        pathtmp = dirname
+        let newName = file.newName || (file.chunkId + file.extName)
+        // If you customize the path property of file in the onFileBegin hook,
+        // it can be used to store the path directly.
+        // 若在onFileBegin钩子中自定义file的path属性，这里可直接用于存储路径
+        let filepath: string, src: string
+        if (file.path) {
+            filepath = file.path
+            newName = path.basename(file.path)
+        } else {
+            const date = new Date(), month = date.getMonth() + 1
+            const yyyyMM = date.getFullYear() + (month < 10 ? '0' + month : '' + month)
+            const folder = path.join(uploadDir, yyyyMM)
+            filepath = path.join(folder, newName)
+            src = path.join(yyyyMM, newName)
+            // Check if the folder exists. If not, create a new folder.
+            if (!fs.existsSync(folder)) {
+                let pathtmp: string
+                folder.split(path.sep).forEach((dirname) => {
+                    if (pathtmp) {
+                        pathtmp = path.join(pathtmp, dirname)
                     } else {
-                        pathtmp = '/'
+                        // If in a linux system, the value of the first dirname is empty, so the value assigned to "/"
+                        if (dirname) {
+                            pathtmp = dirname
+                        } else {
+                            pathtmp = '/'
+                        }
                     }
-                }
-                if (!fs.existsSync(pathtmp)) {
-                    fs.mkdirSync(pathtmp)
-                }
-            })
+                    if (!fs.existsSync(pathtmp)) {
+                        fs.mkdirSync(pathtmp)
+                    }
+                })
+            }
         }
 
         // Create a write stream
@@ -298,27 +326,85 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
         const tempPath = filepath + '.temp'
         const ws = fs.createWriteStream(tempPath)
 
+        // Timeout deletion
+        let deleteTimer: NodeJS.Timeout = null
+        if (deleteTimeout !== Infinity) {
+            deleteTimer = setTimeout(() => {
+                // Delete cach
+                fs.unlink(tempPath, (err) => {
+                    if (err && err.errno != -4058) {
+                        console.error(err)
+                    }
+                })
+                // Delete file
+                fs.unlink(filepath, (err) => {
+                    if (err && err.errno != -4058) {
+                        console.error(err)
+                    }
+                })
+                // clear timeout
+                clearTimeout(deleteTimer)
+                deleteTimer = null
+            }, deleteTimeout)
+        }
+
         // Write
         fileStream.pipe(ws)
             .on('error', (err) => {
+                // Transfer error directly delete cache file
+                fs.unlink(tempPath, (err) => {
+                    if (err && err.errno != -4058) {
+                        console.error(err)
+                    }
+                })
+                // clear timeout
+                if (deleteTimer) {
+                    clearTimeout(deleteTimer)
+                    deleteTimer = null
+                }
+
                 reject(err)
             })
             .on('close', () => {
-                // Rename and remove temp suffix
-                fs.renameSync(tempPath, filepath)
-                resolve(void 0)
+                // Close writeStream
+                ws.destroy()
             })
             .on('finish', () => {
                 file.newName = newName
                 file.path = filepath
-                file.src = src
+                file.src = file.src || src
                 file.lastModified = Date.now()
+                // Rename and remove temp suffix
+                fs.rename(tempPath, filepath, (err) => {
+                    if (err) {
+                        const rejectErr = err.errno == -4058 || err.errno == -4048
+                            ? new Error(`File upload timeout. Please check the value of the module 'koa-body-2' configuration item 'deleteTimeout'.`)
+                            : err
+                        reject(rejectErr);
+                    } else {
+                        resolve(void 0)
+                    }
+                })
             })
 
         // Error
         fileStream.on('error', (err) => {
             // The write stream will not be actively closed and needs to be destroyed.
             ws.destroy()
+
+            // Transfer error directly delete cache file
+            fs.unlink(tempPath, (err) => {
+                if (err && err.errno != -4058) {
+                    console.error(err)
+                }
+            })
+
+            // clear timeout
+            if (deleteTimer) {
+                clearTimeout(deleteTimer)
+                deleteTimer = null
+            }
+
             reject(err)
         })
     })
@@ -426,7 +512,7 @@ export namespace bodyParser {
          * {Integer} Limits the file number.
          * 限制上传文件数量，默认Infinity（不限数量），
          */
-        maxFiles?: number | typeof Infinity
+        maxFiles?: number
 
         /**
          * {Integer} Limits the amount of memory all fields together (except files) can allocate in bytes. If this value is exceeded, an 'error' event is emitted. 
@@ -434,7 +520,7 @@ export namespace bodyParser {
          * @default Infinity
          * @example 200 * 1024 * 1024 (200M)
          */
-        maxFileSize?: number | typeof Infinity
+        maxFileSize?: number
 
         /**
          * {Integer} Limits the number of fields that the querystring parser will decode, default 1000
@@ -468,6 +554,20 @@ export namespace bodyParser {
          * @default os.tmpdir()
          */
         uploadDir?: string
+
+
+        /**
+         * {Integer} The file timeout is deleted, and the timeout is configured here.
+         * It is generally used for periodic cleaning of cache files.
+         * Start timing before uploading files.
+         * In milliseconds. Default Infinity (not deleted).
+         * 文件超时删除，这里配置超时时间。一般用于缓存文件的定期清理。文件上传之前开始计时。
+         * 单位为毫秒。默认`Infinity`（不删除）
+         * @default Infinity
+         * @example 1000 * 60 * 30 (30 minutes)
+         */
+        deleteTimeout?: number
+
 
         /**
          * {Function} Special callback on file begin.
