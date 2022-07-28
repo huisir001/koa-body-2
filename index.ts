@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-07-28 16:25:57
+ * @LastEditTime: 2022-07-28 17:47:13
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -370,10 +370,6 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
                 ws.destroy()
             })
             .on('finish', () => {
-                file.newName = newName
-                file.path = filepath
-                file.src = file.src || src
-                file.lastModified = Date.now()
                 // Rename and remove temp suffix
                 fs.rename(tempPath, filepath, (err) => {
                     if (err) {
@@ -382,6 +378,10 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
                             : err
                         reject(rejectErr);
                     } else {
+                        file.newName = newName
+                        file.path = filepath
+                        file.src = file.src || src
+                        file.lastModified = Date.now()
                         resolve(void 0)
                     }
                 })

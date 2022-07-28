@@ -308,10 +308,6 @@ function fileStreamListener(file, fileStream, uploadDir, deleteTimeout) {
             ws.destroy();
         })
             .on('finish', () => {
-            file.newName = newName;
-            file.path = filepath;
-            file.src = file.src || src;
-            file.lastModified = Date.now();
             // Rename and remove temp suffix
             fs.rename(tempPath, filepath, (err) => {
                 if (err) {
@@ -321,6 +317,10 @@ function fileStreamListener(file, fileStream, uploadDir, deleteTimeout) {
                     reject(rejectErr);
                 }
                 else {
+                    file.newName = newName;
+                    file.path = filepath;
+                    file.src = file.src || src;
+                    file.lastModified = Date.now();
                     resolve(void 0);
                 }
             });
