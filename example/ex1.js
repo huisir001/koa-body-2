@@ -2,7 +2,7 @@
  * @Description: example1
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-23 11:14:03
- * @LastEditTime: 2022-07-28 16:41:45
+ * @LastEditTime: 2022-07-28 17:51:55
  */
 import Koa from 'koa'
 import koaBody2 from '../index.js'
@@ -70,15 +70,15 @@ const koaBodyOpts = {
                             ws.destroy()
                         })
                         .on('finish', () => {
-                            file.newName = newName
-                            file.path = filepath
-                            // file.src = 
-                            file.lastModified = Date.now()
                             // Rename and remove temp suffix
                             fs.rename(tempPath, filepath, (err) => {
                                 if (err) {
                                     reject(err)
                                 } else {
+                                    file.newName = newName
+                                    file.path = filepath
+                                    // file.src = 
+                                    file.lastModified = Date.now()
                                     resolve(void 0)
                                 }
                             })

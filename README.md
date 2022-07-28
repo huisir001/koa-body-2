@@ -125,15 +125,15 @@ const koaBodyOpts = {
                             ws.destroy()
                         })
                         .on('finish', () => {
-                            file.newName = newName
-                            file.path = filepath
-                            // file.src = 
-                            file.lastModified = Date.now()
                             // Rename and remove temp suffix
                             fs.rename(tempPath, filepath, (err) => {
                                 if (err) {
                                     reject(err)
                                 } else {
+                                    file.newName = newName
+                                    file.path = filepath
+                                    // file.src = 
+                                    file.lastModified = Date.now()
                                     resolve(void 0)
                                 }
                             })
