@@ -140,7 +140,10 @@ export declare namespace bodyParser {
          * It is generally used for periodic cleaning of cache files.
          * Start timing before uploading files.
          * In milliseconds. Default Infinity (not deleted).
+         * When configuring this item, consider the relationship between time (numerical value) and memory footprint.
+         * The higher the value, the longer the time, the more timers may be turned on, and the greater the memory footprint.
          * 文件超时删除，这里配置超时时间。一般用于缓存文件的定期清理。文件上传之前开始计时。
+         * 配置此项时请考虑数值(时间)与内存占用之间的关系。数值越大，时间越久，可能开启的定时器越多，内存占用越大。
          * 单位为毫秒。默认`Infinity`（不删除）
          * @default Infinity
          * @example 1000 * 60 * 30 (30 minutes)

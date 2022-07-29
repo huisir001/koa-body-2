@@ -2,7 +2,7 @@
  * @Description: example1
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-23 11:14:03
- * @LastEditTime: 2022-07-28 19:04:55
+ * @LastEditTime: 2022-07-29 14:43:35
  */
 import Koa from 'koa'
 import koaBody2 from '../index.js'
@@ -51,7 +51,14 @@ const koaBodyOpts = {
                     const filepath = path.join(os.tmpdir(), newName)
 
                     // Create a write stream
-                    const ws = fs.createWriteStream(filepath)
+
+                    // To distinguish between complete and incomplete files, 
+                    // use a new suffix here and wait for the file transfer to complete before renaming.
+                    const tempPath = filepath + '.temp'
+                    // Since file occupancy has a maximum (maximum number of files opened),
+                    // you can consider using queues to control the number of WriteStream
+                    // (skipped here for the time being)
+                    const ws = fs.createWriteStream(tempPath)
 
                     // write
                     fileStream.pipe(ws)

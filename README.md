@@ -106,6 +106,9 @@ const koaBodyOpts = {
                     // To distinguish between complete and incomplete files, 
                     // use a new suffix here and wait for the file transfer to complete before renaming.
                     const tempPath = filepath + '.temp'
+                    // Since file occupancy has a maximum (maximum number of files opened),
+                    // you can consider using queues to control the number of WriteStream
+                    // (skipped here for the time being)
                     const ws = fs.createWriteStream(tempPath)
 
                     // write

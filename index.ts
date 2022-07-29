@@ -2,7 +2,7 @@
  * @Description: body数据解析（参考koa-body）
  * @Autor: HuiSir<www.zuifengyun.com>
  * @Date: 2022-06-10 10:16:33
- * @LastEditTime: 2022-07-28 19:05:30
+ * @LastEditTime: 2022-07-29 15:53:18
  */
 import type Koa from 'koa'
 import coBody from 'co-body'
@@ -12,6 +12,8 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
 import { v4 as uuidv4 } from 'uuid'
+import useFileWriteStreamQueue from './hooks/useFileWriteStreamQueue.js'
+const createWs = useFileWriteStreamQueue()
 
 /**
  * Koa supplement
@@ -324,89 +326,106 @@ function fileStreamListener(file: bodyParser.File, fileStream: Readable, uploadD
         // To distinguish between complete and incomplete files, 
         // use a new suffix here and wait for the file transfer to complete before renaming.
         const tempPath = filepath + '.temp'
-        const ws = fs.createWriteStream(tempPath)
+        // The file occupancy has a maximum value (the maximum number of files opened),
+        // so a queue is needed to control the concurrency.After testing,
+        // it is reasonable to set the maximum concurrency to 10.(for multipart upload,
+        // it is reasonable to set the concurrency of front - end http requests to 6, which will not exceed 10.)
+        // 文件占用有个最大值（最多打开多少文件），所以这里需要一个队列来控制并发量。经测试，设置最大并发量为10较合理。
+        // （分片上传，前台http请求并发量一般设为6较合理，不会超过10）
+        createWs(tempPath, (createWsErr, ws) => {
+            if (createWsErr) {
+                reject(createWsErr)
+                return
+            }
 
-        // Timeout deletion
-        let deleteTimer: NodeJS.Timeout = null
-        if (deleteTimeout !== Infinity) {
-            deleteTimer = setTimeout(() => {
-                // If the write stream is not destroyed here, the file will be occupied and cannot be deleted.
-                ws.destroy()
-                // Delete cach
-                fs.unlink(tempPath, (err) => {
-                    if (err && err.errno != -4058) {
-                        console.error(err)
-                    }
-                })
-                // Delete file
-                fs.unlink(filepath, (err) => {
-                    if (err && err.errno != -4058) {
-                        console.error(err)
-                    }
-                })
-                // clear timeout
-                clearTimeout(deleteTimer)
-                deleteTimer = null
-            }, deleteTimeout)
-        }
+            // Timeout deletion
+            let deleteTimer: NodeJS.Timeout = null
+            if (deleteTimeout !== Infinity) {
+                // After testing, the memory occupation of setTimeout is less than 100m after 100000 entries are opened,
+                // so there is no need to consider the memory consumption of setTimeout too much. 
+                // The main consideration is the amount of heap memory consumed by code in setTimeout.
+                // 经测试，setTimeout在开启10万条后的内存占用为100M之内，所以不必过多担心setTimeout的内存消耗,
+                // 主要考虑setTimeout内的代码所占用的堆内存大小。
+                deleteTimer = setTimeout(() => {
+                    // If the write stream is not destroyed here, the file will be occupied and cannot be deleted.
+                    ws.destroy()
+                    // Delete cach
+                    fs.unlink(tempPath, (err) => {
+                        if (err && err.errno != -4058) {
+                            console.error(err)
+                        }
+                    })
+                    // Delete file
+                    fs.unlink(filepath, (err) => {
+                        if (err && err.errno != -4058) {
+                            console.error(err)
+                        }
+                    })
+                    // clear timeout
+                    clearTimeout(deleteTimer)
+                    deleteTimer = null
+                }, deleteTimeout)
+            }
 
-        // Write
-        fileStream.pipe(ws)
-            .on('error', (err) => {
-                // If the write stream is not destroyed here, the file will be occupied and cannot be deleted.
+            // Write
+            fileStream.pipe(ws)
+                .on('error', (err) => {
+                    // If the write stream is not destroyed here, the file will be occupied and cannot be deleted.
+                    ws.destroy()
+                    // Transfer error directly delete cache file
+                    fs.unlink(tempPath, (err) => {
+                        if (err && err.errno != -4058) {
+                            console.error(err)
+                        }
+                    })
+                    // clear timeout
+                    if (deleteTimer) {
+                        clearTimeout(deleteTimer)
+                        deleteTimer = null
+                    }
+                    reject(err)
+                })
+                .on('finish', () => {
+                    // If the write stream is not destroyed here, the file will be occupied and cannot be rename.
+                    ws.destroy()
+                    // Rename and remove temp suffix
+                    fs.rename(tempPath, filepath, (err) => {
+                        if (err) {
+                            const rejectErr = err.errno == -4058 || err.errno == -4048
+                                // Please check the value of the module 'koa-body-2' configuration item 'deleteTimeout'.
+                                ? new Error(`File upload timeout. Please check your Internet speed.`)
+                                : err
+                            reject(rejectErr);
+                        } else {
+                            file.newName = newName
+                            file.path = filepath
+                            file.src = file.src || src
+                            file.lastModified = Date.now()
+                            resolve(void 0)
+                        }
+                    })
+                })
+
+            // Error
+            fileStream.on('error', (err) => {
+                // The write stream will not be actively closed and needs to be destroyed.
                 ws.destroy()
+
                 // Transfer error directly delete cache file
                 fs.unlink(tempPath, (err) => {
                     if (err && err.errno != -4058) {
                         console.error(err)
                     }
                 })
+
                 // clear timeout
                 if (deleteTimer) {
                     clearTimeout(deleteTimer)
                     deleteTimer = null
                 }
+
                 reject(err)
             })
-            .on('finish', () => {
-                // If the write stream is not destroyed here, the file will be occupied and cannot be rename.
-                ws.destroy()
-                // Rename and remove temp suffix
-                fs.rename(tempPath, filepath, (err) => {
-                    if (err) {
-                        const rejectErr = err.errno == -4058 || err.errno == -4048
-                            ? new Error(`File upload timeout. Please check the value of the module 'koa-body-2' configuration item 'deleteTimeout'.`)
-                            : err
-                        reject(rejectErr);
-                    } else {
-                        file.newName = newName
-                        file.path = filepath
-                        file.src = file.src || src
-                        file.lastModified = Date.now()
-                        resolve(void 0)
-                    }
-                })
-            })
-
-        // Error
-        fileStream.on('error', (err) => {
-            // The write stream will not be actively closed and needs to be destroyed.
-            ws.destroy()
-
-            // Transfer error directly delete cache file
-            fs.unlink(tempPath, (err) => {
-                if (err && err.errno != -4058) {
-                    console.error(err)
-                }
-            })
-
-            // clear timeout
-            if (deleteTimer) {
-                clearTimeout(deleteTimer)
-                deleteTimer = null
-            }
-
-            reject(err)
         })
     })
 }
@@ -562,7 +581,10 @@ export namespace bodyParser {
          * It is generally used for periodic cleaning of cache files.
          * Start timing before uploading files.
          * In milliseconds. Default Infinity (not deleted).
+         * When configuring this item, consider the relationship between time (numerical value) and memory footprint.
+         * The higher the value, the longer the time, the more timers may be turned on, and the greater the memory footprint.
          * 文件超时删除，这里配置超时时间。一般用于缓存文件的定期清理。文件上传之前开始计时。
+         * 配置此项时请考虑数值(时间)与内存占用之间的关系。数值越大，时间越久，可能开启的定时器越多，内存占用越大。
          * 单位为毫秒。默认`Infinity`（不删除）
          * @default Infinity
          * @example 1000 * 60 * 30 (30 minutes)
